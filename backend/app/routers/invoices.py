@@ -1,7 +1,11 @@
+import csv
+import io
 import math
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -142,6 +146,52 @@ async def process_invoice(
     db.commit()
     db.refresh(invoice)
     return invoice
+
+
+@router.get("/{invoice_id}/download")
+def download_invoice_file(invoice_id: int, db: Session = Depends(get_db)):
+    """Download the original uploaded invoice file."""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if not invoice.file_path or not os.path.exists(invoice.file_path):
+        raise HTTPException(status_code=404, detail="Original file not found on disk")
+
+    filename = os.path.basename(invoice.file_path)
+    return FileResponse(
+        path=invoice.file_path,
+        filename=filename,
+        media_type="application/pdf",
+    )
+
+
+@router.get("/{invoice_id}/export-csv")
+def export_invoice_csv(invoice_id: int, db: Session = Depends(get_db)):
+    """Export processed invoice items as CSV."""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Description", "Part Number", "Quantity", "Unit Price", "Total Price", "Matched"])
+    for item in invoice.items:
+        writer.writerow([
+            item.description or "",
+            item.part_number or "",
+            item.quantity,
+            item.unit_price if item.unit_price is not None else "",
+            item.total_price if item.total_price is not None else "",
+            "Yes" if item.matched else "No",
+        ])
+
+    output.seek(0)
+    safe_name = (invoice.invoice_number or f"invoice_{invoice_id}").replace(" ", "_")
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}_items.csv"'},
+    )
 
 
 @router.delete("/{invoice_id}", status_code=204)

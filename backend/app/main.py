@@ -22,7 +22,9 @@ from app.routers import (
     maintenance,
     manufacturers,
     materials,
+    pnp,
     proxmox,
+    saved_files,
     software,
     stock_items,
     stock_locations,
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     os.makedirs(os.path.join(settings.UPLOAD_DIR, "invoices"), exist_ok=True)
     os.makedirs(os.path.join(settings.UPLOAD_DIR, "boms"), exist_ok=True)
     os.makedirs(os.path.join(settings.UPLOAD_DIR, "attachments"), exist_ok=True)
+    os.makedirs(os.path.join(settings.UPLOAD_DIR, "saved"), exist_ok=True)
 
     # Initialize database tables
     init_db()
@@ -130,6 +133,8 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(system_settings.router, prefix="/api/v1")
 app.include_router(audit_logs.router, prefix="/api/v1")
+app.include_router(pnp.router, prefix="/api/v1")
+app.include_router(saved_files.router, prefix="/api/v1")
 
 
 @app.get("/")

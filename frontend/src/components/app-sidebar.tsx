@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom"
 import {
   HomeIcon,
+  ArrowsPointingOutIcon,
   CpuChipIcon,
   ClipboardDocumentListIcon,
   DocumentTextIcon,
@@ -85,6 +86,8 @@ const sections: NavSection[] = [
     items: [
       { to: "/tools", label: "Tools", icon: WrenchScrewdriverIcon, end: true },
       { to: "/materials", label: "Materials", icon: CubeIcon, end: true },
+      { to: "/tools/pnp-converter", label: "P&P Converter", icon: ArrowsPointingOutIcon },
+      { to: "/tools/interactive-bom", label: "Interactive BOM", icon: ClipboardDocumentListIcon },
     ],
   },
   {

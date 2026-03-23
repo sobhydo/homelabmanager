@@ -18,3 +18,4 @@ from app.models.part_lot import PartLot  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.system_settings import SystemSetting  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
+from app.models.saved_file import SavedFile  # noqa: F401

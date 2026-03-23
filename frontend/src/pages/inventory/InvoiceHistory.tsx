@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PlusIcon } from "@heroicons/react/24/outline";
+import {
+  PlusIcon,
+  ArrowDownTrayIcon,
+  DocumentTextIcon,
+} from "@heroicons/react/24/outline";
 import { format } from "date-fns";
 import { useInvoices } from "../../api/invoices";
 import type { Invoice } from "../../types/bom";
@@ -68,6 +72,34 @@ export default function InvoiceHistory() {
         <span className="text-muted-foreground text-sm">
           {format(new Date(item.created_at), "MMM d, yyyy")}
         </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      render: (item) => (
+        <div className="flex items-center gap-1 justify-end">
+          {item.file_path && (
+            <a
+              href={`/api/v1/invoices/${item.id}/download`}
+              download
+              className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              title="Download original file"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+            </a>
+          )}
+          {item.status === "processed" && (
+            <a
+              href={`/api/v1/invoices/${item.id}/export-csv`}
+              download
+              className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              title="Export items as CSV"
+            >
+              <DocumentTextIcon className="h-4 w-4" />
+            </a>
+          )}
+        </div>
       ),
     },
   ];

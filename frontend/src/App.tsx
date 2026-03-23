@@ -83,6 +83,8 @@ const CategoryList = lazy(() => import("./pages/parts/CategoryList"));
 const CategoryForm = lazy(() => import("./pages/parts/CategoryForm"));
 const FootprintList = lazy(() => import("./pages/parts/FootprintList"));
 const FootprintForm = lazy(() => import("./pages/parts/FootprintForm"));
+const PnPConverter = lazy(() => import("./pages/tools/PnPConverter"));
+const InteractiveBOM = lazy(() => import("./pages/tools/InteractiveBOM"));
 
 function LoadingFallback() {
   return (
@@ -239,6 +241,8 @@ function AppRoutes() {
           <Route path="/footprints" element={<FootprintList />} />
           <Route path="/footprints/new" element={<FootprintForm />} />
           <Route path="/footprints/:id/edit" element={<FootprintForm />} />
+          <Route path="/tools/pnp-converter" element={<PnPConverter />} />
+          <Route path="/tools/interactive-bom" element={<InteractiveBOM />} />
           <Route path="/proxmox" element={<ProxmoxDashboard />} />
           <Route path="/proxmox/settings" element={<ProxmoxSettings />} />
           <Route path="/proxmox/:serverId" element={<NodeStatus />} />

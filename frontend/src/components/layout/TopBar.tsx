@@ -61,6 +61,8 @@ const routeTitles: Record<string, string> = {
   "/admin/users/new": "New User",
   "/admin/settings": "System Settings",
   "/admin/audit-log": "Audit Log",
+  "/tools/pnp-converter": "Pick & Place Converter",
+  "/tools/interactive-bom": "Interactive BOM Viewer",
   "/profile": "My Profile",
 };
 

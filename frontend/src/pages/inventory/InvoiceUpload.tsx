@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { ArrowDownTrayIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { useUploadInvoice, useProcessInvoice } from "../../api/invoices";
 import type { Invoice } from "../../types/bom";
 import FileUpload from "../../components/ui/FileUpload";
@@ -155,10 +156,30 @@ export default function InvoiceUpload() {
             />
           </Card>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Button onClick={handleProcess} loading={processMutation.isPending}>
               Process & Add to Stock
             </Button>
+            {invoice.file_path && (
+              <a
+                href={`/api/v1/invoices/${invoice.id}/download`}
+                download
+                className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" />
+                Download Original
+              </a>
+            )}
+            {invoice.status === "processed" && (
+              <a
+                href={`/api/v1/invoices/${invoice.id}/export-csv`}
+                download
+                className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              >
+                <DocumentTextIcon className="h-4 w-4" />
+                Export Items CSV
+              </a>
+            )}
             <Button variant="ghost" onClick={() => navigate("/inventory/invoices")}>
               Cancel
             </Button>
