@@ -17,6 +17,8 @@ export default function InvoiceUpload() {
   const processMutation = useProcessInvoice();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
 
+  const isProcessed = invoice?.status === "processed";
+
   const handleFileSelect = async (files: File[]) => {
     const file = files[0];
     if (!file) return;
@@ -24,7 +26,13 @@ export default function InvoiceUpload() {
     try {
       const result = await uploadMutation.mutateAsync(file);
       setInvoice(result);
-      toast.success("Invoice uploaded and parsed.");
+      if (result.status === "processed") {
+        toast.success(
+          `LCSC order imported: ${result.items?.length || 0} items, $${result.total_amount?.toFixed(2) || "0.00"} total.`
+        );
+      } else {
+        toast.success("Invoice uploaded.");
+      }
     } catch {
       // handled
     }
@@ -33,7 +41,8 @@ export default function InvoiceUpload() {
   const handleProcess = async () => {
     if (!invoice) return;
     try {
-      await processMutation.mutateAsync(invoice.id);
+      const result = await processMutation.mutateAsync(invoice.id);
+      setInvoice(result);
       toast.success("Invoice processed. Stock updated.");
       navigate("/inventory/invoices");
     } catch {
@@ -50,6 +59,15 @@ export default function InvoiceUpload() {
       ),
     },
     {
+      key: "part_number",
+      header: "Part #",
+      render: (item) => (
+        <span className="text-muted-foreground font-mono text-xs">
+          {item.part_number || "-"}
+        </span>
+      ),
+    },
+    {
       key: "quantity",
       header: "Qty",
       render: (item) => <span className="text-foreground">{item.quantity}</span>,
@@ -59,7 +77,7 @@ export default function InvoiceUpload() {
       header: "Unit Price",
       render: (item) => (
         <span className="text-foreground">
-          {item.unit_price != null ? `$${item.unit_price.toFixed(2)}` : "-"}
+          {item.unit_price != null ? `$${item.unit_price.toFixed(4)}` : "-"}
         </span>
       ),
     },
@@ -85,11 +103,11 @@ export default function InvoiceUpload() {
   ];
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-foreground mb-1">Upload Invoice</h1>
         <p className="text-sm text-muted-foreground">
-          Upload a PDF invoice to automatically extract items and match them with your component inventory.
+          Upload a PDF invoice or LCSC order CSV to extract items and match them with your inventory.
         </p>
       </div>
 
@@ -97,14 +115,17 @@ export default function InvoiceUpload() {
         <CardContent className="pt-6">
         <FileUpload
           onFileSelect={handleFileSelect}
-          accept={{ "application/pdf": [".pdf"] }}
-          label="Upload PDF invoice"
-          description="Drag and drop a PDF, or click to browse"
+          accept={{
+            "application/pdf": [".pdf"],
+            "text/csv": [".csv"],
+          }}
+          label="Upload invoice (PDF or LCSC CSV)"
+          description="Drag and drop a PDF or CSV, or click to browse"
         />
         {uploadMutation.isPending && (
           <div className="mt-4 flex items-center gap-3 text-muted-foreground">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
-            <span className="text-sm">Processing invoice with AI...</span>
+            <span className="text-sm">Processing...</span>
           </div>
         )}
         </CardContent>
@@ -115,7 +136,12 @@ export default function InvoiceUpload() {
           {/* Invoice Details */}
           <Card>
             <CardHeader>
-              <CardTitle>Invoice Details</CardTitle>
+              <div className="flex items-center gap-3">
+                <CardTitle>Invoice Details</CardTitle>
+                {isProcessed && (
+                  <Badge color="green">Auto-processed</Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -146,7 +172,14 @@ export default function InvoiceUpload() {
           {/* Extracted Items */}
           <Card>
             <CardHeader>
-              <CardTitle>Extracted Items</CardTitle>
+              <CardTitle>
+                {isProcessed ? "Items" : "Extracted Items"}
+                {invoice.items?.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    ({invoice.items.length} items)
+                  </span>
+                )}
+              </CardTitle>
             </CardHeader>
             <Table
               columns={itemColumns}
@@ -157,9 +190,16 @@ export default function InvoiceUpload() {
           </Card>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <Button onClick={handleProcess} loading={processMutation.isPending}>
-              Process & Add to Stock
-            </Button>
+            {!isProcessed && (
+              <Button onClick={handleProcess} loading={processMutation.isPending}>
+                Process & Add to Stock
+              </Button>
+            )}
+            {isProcessed && (
+              <Button onClick={() => navigate("/inventory/invoices")}>
+                Done
+              </Button>
+            )}
             {invoice.file_path && (
               <a
                 href={`/api/v1/invoices/${invoice.id}/download`}
@@ -170,7 +210,7 @@ export default function InvoiceUpload() {
                 Download Original
               </a>
             )}
-            {invoice.status === "processed" && (
+            {isProcessed && (
               <a
                 href={`/api/v1/invoices/${invoice.id}/export-csv`}
                 download
@@ -180,9 +220,11 @@ export default function InvoiceUpload() {
                 Export Items CSV
               </a>
             )}
-            <Button variant="ghost" onClick={() => navigate("/inventory/invoices")}>
-              Cancel
-            </Button>
+            {!isProcessed && (
+              <Button variant="ghost" onClick={() => navigate("/inventory/invoices")}>
+                Cancel
+              </Button>
+            )}
           </div>
         </>
       )}

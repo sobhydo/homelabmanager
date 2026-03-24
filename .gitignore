@@ -3,38 +3,65 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
-dist/
-build/
 *.egg
 .venv/
 venv/
 env/
+.python-version
 
 # Node
 node_modules/
-frontend/dist/
 *.tsbuildinfo
+
+# Build artifacts
+dist/
+build/
+frontend/dist/
 
 # Environment
 .env
 .env.local
+.env.*.local
 
 # Database
-data/*.db
-data/*.db-journal
+*.db
+*.db-journal
+*.db-wal
+*.sqlite3
 
-# Uploads
-uploads/invoices/*
-uploads/boms/*
-!uploads/invoices/.gitkeep
-!uploads/boms/.gitkeep
+# Uploads (keep directory structure, ignore user content)
+backend/uploads/invoices/*
+backend/uploads/boms/*
+backend/uploads/attachments/*
+backend/uploads/saved/*
+!backend/uploads/**/.gitkeep
 
-# IDE
+# IDE / Editors
 .idea/
 .vscode/
 *.swp
 *.swo
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS
 .DS_Store
+Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Testing / Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/

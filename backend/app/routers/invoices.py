@@ -18,6 +18,7 @@ from app.schemas.invoice import (
     InvoiceUploadResponse,
 )
 from app.services.invoice_parser import parse_invoice_pdf
+from app.services.lcsc_parser import is_lcsc_csv, parse_lcsc_csv
 from app.utils.file_handling import save_upload_file
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -62,15 +63,77 @@ def list_invoices(
     )
 
 
-@router.post("/upload", response_model=InvoiceUploadResponse)
+@router.post("/upload", response_model=InvoiceResponse)
 async def upload_invoice(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     settings=Depends(get_settings),
 ):
-    """Upload an invoice PDF."""
-    file_path = await save_upload_file(file, settings.UPLOAD_DIR, subdir="invoices")
+    """Upload an invoice file (PDF or LCSC CSV).
 
+    PDFs are saved and require a separate /process call.
+    LCSC CSVs are parsed immediately and returned fully processed.
+    """
+    # Read content to detect format before saving
+    raw_bytes = await file.read()
+    await file.seek(0)  # reset for save_upload_file
+
+    file_path = await save_upload_file(file, settings.UPLOAD_DIR, subdir="invoices")
+    filename = file.filename or ""
+    is_csv = filename.lower().endswith(".csv")
+
+    # Try LCSC CSV auto-parse
+    if is_csv:
+        try:
+            content = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            content = raw_bytes.decode("latin-1")
+
+        if is_lcsc_csv(content):
+            parsed = parse_lcsc_csv(content, filename)
+
+            invoice = Invoice(
+                file_path=file_path,
+                invoice_number=parsed.get("invoice_number"),
+                supplier=parsed.get("supplier"),
+                total_amount=parsed.get("total_amount"),
+                currency=parsed.get("currency", "USD"),
+                status="processed",
+                parsed_data=str(parsed),
+            )
+            db.add(invoice)
+            db.flush()
+
+            for item_data in parsed.get("items", []):
+                mpn = item_data.get("part_number")
+                component = None
+                is_matched = 0
+                if mpn:
+                    component = (
+                        db.query(Component)
+                        .filter(Component.manufacturer_part_number == mpn)
+                        .first()
+                    )
+                    if component:
+                        is_matched = 1
+
+                invoice_item = InvoiceItem(
+                    invoice_id=invoice.id,
+                    component_id=component.id if component else None,
+                    description=item_data.get("description"),
+                    part_number=mpn,
+                    quantity=item_data.get("quantity", 1),
+                    unit_price=item_data.get("unit_price"),
+                    total_price=item_data.get("total_price"),
+                    matched=is_matched,
+                )
+                db.add(invoice_item)
+
+            db.commit()
+            db.refresh(invoice)
+            return invoice
+
+    # Default: save as uploaded (PDF or unrecognised CSV)
     invoice = Invoice(
         file_path=file_path,
         status="uploaded",
@@ -78,12 +141,7 @@ async def upload_invoice(
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
-
-    return InvoiceUploadResponse(
-        invoice_id=invoice.id,
-        file_path=file_path,
-        status="uploaded",
-    )
+    return invoice
 
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
@@ -158,10 +216,11 @@ def download_invoice_file(invoice_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Original file not found on disk")
 
     filename = os.path.basename(invoice.file_path)
+    media = "text/csv" if filename.lower().endswith(".csv") else "application/pdf"
     return FileResponse(
         path=invoice.file_path,
         filename=filename,
-        media_type="application/pdf",
+        media_type=media,
     )
 
 
