@@ -7,7 +7,7 @@ import type { MachineCreate } from "../../types/machine";
 import Button from "../../components/ui/button";
 import Input from "../../components/ui/input";
 import Select from "../../components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { AITextarea } from "@/components/ui/ai-textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -138,11 +138,11 @@ export default function MachineForm() {
           </div>
           <div>
             <Label className="mb-1.5">Description</Label>
-            <Textarea name="description" value={form.description} onChange={handleChange} rows={3} />
+            <AITextarea name="description" value={form.description} onChange={handleChange} rows={3} entityType="machine" formContext={form} />
           </div>
           <div>
             <Label className="mb-1.5">Notes</Label>
-            <Textarea name="notes" value={form.notes} onChange={handleChange} rows={3} />
+            <AITextarea name="notes" value={form.notes} onChange={handleChange} rows={3} entityType="machine" formContext={form} />
           </div>
         </CardContent>
       </Card>

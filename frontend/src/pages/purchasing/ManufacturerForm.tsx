@@ -9,7 +9,7 @@ import {
 import type { ManufacturerCreate } from "../../types/supplier";
 import Button from "../../components/ui/button";
 import Input from "../../components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { AITextarea } from "@/components/ui/ai-textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,12 +128,14 @@ export default function ManufacturerForm() {
           </div>
           <div>
             <Label className="mb-1.5">Description</Label>
-            <Textarea
+            <AITextarea
               name="description"
               value={form.description}
               onChange={handleChange}
               rows={3}
               placeholder="Optional description"
+              entityType="manufacturer"
+              formContext={form}
             />
           </div>
         </CardContent>
@@ -156,12 +158,14 @@ export default function ManufacturerForm() {
             />
             <Label htmlFor="is_active">Active</Label>
           </div>
-          <Textarea
+          <AITextarea
             name="notes"
             value={form.notes}
             onChange={handleChange}
             rows={4}
             placeholder="Any additional notes..."
+            entityType="manufacturer"
+            formContext={form}
           />
         </CardContent>
       </Card>

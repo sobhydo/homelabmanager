@@ -10,7 +10,7 @@ import type { FootprintCreate } from "../../types/footprint";
 import Button from "../../components/ui/button";
 import Input from "../../components/ui/input";
 import Select from "../../components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { AITextarea } from "@/components/ui/ai-textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -140,12 +140,14 @@ export default function FootprintForm() {
 
         <div>
           <Label className="mb-1">Description</Label>
-          <Textarea
+          <AITextarea
             name="description"
             value={form.description || ""}
             onChange={handleChange}
             rows={3}
             placeholder="Optional description"
+            entityType="footprint"
+            formContext={form}
           />
         </div>
 

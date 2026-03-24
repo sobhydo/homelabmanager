@@ -16,7 +16,7 @@ import Select from "../../components/ui/select";
 import Modal from "../../components/ui/Modal";
 import StatusBadge from "../../components/shared/StatusBadge";
 import Badge from "../../components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
+import { AITextarea } from "@/components/ui/ai-textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -205,7 +205,7 @@ export default function MaintenanceLog() {
           </div>
           <div>
             <Label className="mb-1.5">Description</Label>
-            <Textarea name="description" value={form.description} onChange={handleChange} rows={3} />
+            <AITextarea name="description" value={form.description} onChange={handleChange} rows={3} entityType="maintenance task" formContext={form} />
           </div>
         </div>
       </Modal>

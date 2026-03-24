@@ -11,7 +11,7 @@ import type { CategoryCreate } from "../../types/category";
 import type { CategoryTree } from "../../types/category";
 import Button from "../../components/ui/button";
 import Input from "../../components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { AITextarea } from "@/components/ui/ai-textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -144,12 +144,14 @@ export default function CategoryForm() {
 
           <div>
             <Label className="mb-1">Description</Label>
-            <Textarea
+            <AITextarea
               name="description"
               value={form.description || ""}
               onChange={handleChange}
               rows={3}
               placeholder="Optional description"
+              entityType="part category"
+              formContext={form}
             />
           </div>
 

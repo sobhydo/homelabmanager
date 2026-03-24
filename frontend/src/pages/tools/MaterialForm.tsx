@@ -7,7 +7,7 @@ import type { MaterialCreate } from "../../types/tool";
 import Button from "../../components/ui/button";
 import Input from "../../components/ui/input";
 import Select from "../../components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { AITextarea } from "@/components/ui/ai-textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
@@ -144,7 +144,7 @@ export default function MaterialForm() {
         </CardHeader>
         <Separator />
         <CardContent className="space-y-4 pt-6">
-        <Textarea name="notes" value={form.notes} onChange={handleChange} rows={4} />
+        <AITextarea name="notes" value={form.notes} onChange={handleChange} rows={4} entityType="material" formContext={form} />
         </CardContent>
       </Card>
 

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings
 from app.database import init_db
 from app.routers import (
+    ai,
     attachments,
     audit_logs,
     auth,
@@ -135,6 +136,7 @@ app.include_router(system_settings.router, prefix="/api/v1")
 app.include_router(audit_logs.router, prefix="/api/v1")
 app.include_router(pnp.router, prefix="/api/v1")
 app.include_router(saved_files.router, prefix="/api/v1")
+app.include_router(ai.router, prefix="/api/v1")
 
 
 @app.get("/")
