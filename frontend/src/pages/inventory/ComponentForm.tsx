@@ -8,7 +8,6 @@ import {
 } from "../../api/components";
 import { useCategoryTree } from "../../api/categories";
 import { useFootprints } from "../../api/footprints";
-import { COMPONENT_CATEGORIES } from "../../types/component";
 import type { ComponentCreate } from "../../types/component";
 import type { CategoryTree } from "../../types/category";
 import Button from "../../components/ui/button";
@@ -60,6 +59,8 @@ const emptyForm: ComponentCreate = {
   datasheet_url: "",
   unit_price: 0,
   supplier: "",
+  supplier_part_number: "",
+  supplier_url: "",
   notes: "",
   category_id: null,
   footprint_id: null,
@@ -100,6 +101,8 @@ export default function ComponentForm() {
         datasheet_url: existing.datasheet_url || "",
         unit_price: existing.unit_price || 0,
         supplier: existing.supplier || "",
+        supplier_part_number: existing.supplier_part_number || "",
+        supplier_url: existing.supplier_url || "",
         notes: existing.notes || "",
         category_id: existing.category_id ?? null,
         footprint_id: existing.footprint_id ?? null,
@@ -129,8 +132,8 @@ export default function ComponentForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.category) {
-      toast.error("Name and category are required.");
+    if (!form.name) {
+      toast.error("Name is required.");
       return;
     }
 
@@ -163,11 +166,6 @@ export default function ComponentForm() {
       </div>
     );
   }
-
-  const categoryOptions = COMPONENT_CATEGORIES.map((c) => ({
-    value: c,
-    label: c,
-  }));
 
   const categoryTreeOptions = categoryTree ? flattenCategoryTree(categoryTree) : [];
 
@@ -202,16 +200,8 @@ export default function ComponentForm() {
             required
             placeholder="e.g. 10k Ohm Resistor"
           />
-          <Select
-            label="Category (legacy)"
-            name="category"
-            value={form.category}
-            onChange={handleChange}
-            options={categoryOptions}
-            placeholder="Select category"
-          />
           <div>
-            <Label className="mb-1">Part Category</Label>
+            <Label className="mb-1">Category</Label>
             <select
               name="category_id"
               value={form.category_id ? String(form.category_id) : ""}
@@ -429,6 +419,22 @@ export default function ComponentForm() {
             name="supplier"
             value={form.supplier}
             onChange={handleChange}
+            placeholder="e.g. LCSC, DigiKey, Mouser"
+          />
+          <Input
+            label="Supplier Part Number"
+            name="supplier_part_number"
+            value={form.supplier_part_number || ""}
+            onChange={handleChange}
+            placeholder="e.g. C25879"
+          />
+          <Input
+            label="Supplier URL"
+            name="supplier_url"
+            value={form.supplier_url || ""}
+            onChange={handleChange}
+            type="url"
+            placeholder="Link to part on supplier's website"
           />
           <Input
             label="Datasheet URL"
@@ -436,6 +442,7 @@ export default function ComponentForm() {
             value={form.datasheet_url}
             onChange={handleChange}
             type="url"
+            placeholder="Link to datasheet PDF"
           />
         </div>
         </CardContent>

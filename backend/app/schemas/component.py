@@ -17,6 +17,7 @@ class ComponentBase(BaseModel):
     datasheet_url: Optional[str] = None
     unit_price: Optional[float] = None
     supplier: Optional[str] = None
+    supplier_url: Optional[str] = None
     package_type: Optional[str] = None
     notes: Optional[str] = None
     # Part-DB style fields
@@ -48,6 +49,7 @@ class ComponentUpdate(BaseModel):
     datasheet_url: Optional[str] = None
     unit_price: Optional[float] = None
     supplier: Optional[str] = None
+    supplier_url: Optional[str] = None
     package_type: Optional[str] = None
     notes: Optional[str] = None
     # Part-DB style fields

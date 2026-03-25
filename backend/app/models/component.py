@@ -21,6 +21,7 @@ class Component(Base):
     datasheet_url = Column(String(500), nullable=True)
     unit_price = Column(Float, nullable=True)
     supplier = Column(String(255), nullable=True)
+    supplier_url = Column(String(500), nullable=True)
     package_type = Column(String(50), nullable=True)
     notes = Column(Text, nullable=True)
 

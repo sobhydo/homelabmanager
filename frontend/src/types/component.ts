@@ -15,6 +15,7 @@ export interface Component {
   datasheet_url?: string;
   unit_price?: number;
   supplier?: string;
+  supplier_url?: string;
   notes?: string;
   category_id?: number | null;
   footprint_id?: number | null;
@@ -45,6 +46,7 @@ export interface ComponentCreate {
   datasheet_url?: string;
   unit_price?: number;
   supplier?: string;
+  supplier_url?: string;
   notes?: string;
   category_id?: number | null;
   footprint_id?: number | null;
