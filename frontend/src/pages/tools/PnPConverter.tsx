@@ -35,6 +35,9 @@ import {
   useUploadSavedFile,
   useDeleteSavedFile,
 } from "../../api/saved-files";
+import { useFeeders } from "../../api/feeders";
+import { useMachines } from "../../api/machines";
+import type { Feeder } from "../../types/feeder";
 
 // ---------------------------------------------------------------------------
 // Step indicator
@@ -140,6 +143,13 @@ export default function PnPConverter() {
     Record<string, { feederNo: number; skip: boolean; head: number; mountSpeed: number }>
   >({});
   const [showSavedSessions, setShowSavedSessions] = useState(false);
+
+  // Feeder configuration
+  const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
+  const { data: machinesData } = useMachines({ page_size: 200 });
+  const pnpMachines = (machinesData?.items || []).filter((m) => m.machine_type === "Pick & Place");
+  const { data: feedersData } = useFeeders(selectedMachineId ?? undefined);
+  const feeders: Feeder[] = feedersData?.items || [];
 
   // Saved sessions
   const PNP_CATEGORY = "pnp_session";
@@ -484,17 +494,52 @@ export default function PnPConverter() {
     {
       key: "feederNo",
       header: "Feeder",
-      className: "w-20",
-      render: (c) => (
-        <input
-          type="number"
-          min={1}
-          max={99}
-          value={getSettings(c.designator).feederNo}
-          onChange={(e) => updateSettings(c.designator, { feederNo: parseInt(e.target.value) || 1 })}
-          className="w-16 h-7 rounded-md border border-input bg-background px-2 text-xs font-mono text-center focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        />
-      ),
+      className: "w-28",
+      render: (c) => {
+        const matchingFeeders = feeders.filter(
+          (f) =>
+            (f.component_value && c.value && f.component_value === c.value) ||
+            (f.component_package && c.package && f.component_package === c.package)
+        );
+        return (
+          <div className="flex items-center gap-1">
+            {feeders.length > 0 ? (
+              <select
+                value={getSettings(c.designator).feederNo}
+                onChange={(e) => {
+                  const feederNo = parseInt(e.target.value) || 1;
+                  const feeder = feeders.find((f) => f.slot_number === feederNo);
+                  updateSettings(c.designator, {
+                    feederNo,
+                    ...(feeder ? { head: feeder.head, mountSpeed: feeder.mount_speed } : {}),
+                  });
+                }}
+                className={`w-24 h-7 rounded-md border border-input bg-background px-1 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                  matchingFeeders.length > 0 ? "border-emerald-500/50" : ""
+                }`}
+              >
+                <option value={getSettings(c.designator).feederNo}>
+                  #{getSettings(c.designator).feederNo} (manual)
+                </option>
+                {feeders.map((f) => (
+                  <option key={f.id} value={f.slot_number}>
+                    #{f.slot_number} {f.component_value || f.component_package || ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={getSettings(c.designator).feederNo}
+                onChange={(e) => updateSettings(c.designator, { feederNo: parseInt(e.target.value) || 1 })}
+                className="w-16 h-7 rounded-md border border-input bg-background px-2 text-xs font-mono text-center focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "side",
@@ -1001,6 +1046,69 @@ export default function PnPConverter() {
                 </div>
               )}
             </div>
+
+            {/* Machine feeder config selector */}
+            {pnpMachines.length > 0 && (
+              <div className="rounded-lg border border-border p-4 space-y-3">
+                <div className="text-sm font-medium">Feeder Configuration</div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">P&amp;P Machine</Label>
+                    <select
+                      value={selectedMachineId ?? ""}
+                      onChange={(e) => setSelectedMachineId(e.target.value ? Number(e.target.value) : null)}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-w-[200px]"
+                    >
+                      <option value="">None (manual entry)</option>
+                      {pnpMachines.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}{m.model ? ` (${m.model})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {feeders.length > 0 && (
+                    <>
+                      <Badge variant="outline">{feeders.length} feeders loaded</Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => {
+                          let matched = 0;
+                          const updated = { ...componentSettings };
+                          components.forEach((c) => {
+                            const feeder = feeders.find(
+                              (f) =>
+                                (f.component_value && c.value && f.component_value === c.value) ||
+                                (f.component_package && c.package && f.component_package === c.package)
+                            );
+                            if (feeder) {
+                              updated[c.designator] = {
+                                ...getSettings(c.designator),
+                                feederNo: feeder.slot_number,
+                                head: feeder.head,
+                                mountSpeed: feeder.mount_speed,
+                              };
+                              matched++;
+                            }
+                          });
+                          setComponentSettings(updated);
+                          toast.success(`Auto-assigned ${matched}/${components.length} components to feeders`);
+                        }}
+                      >
+                        Auto-Assign Feeders
+                      </Button>
+                    </>
+                  )}
+                </div>
+                {selectedMachineId && feeders.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No feeders configured for this machine. <a href="/machines/feeders" className="text-primary underline">Configure feeders</a>
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Side filter + quick actions */}
             <div className="flex flex-wrap items-end justify-between gap-4">

@@ -5,6 +5,7 @@ from app.models.invoice import Invoice, InvoiceItem  # noqa: F401
 from app.models.tool import Tool, ToolCheckout  # noqa: F401
 from app.models.material import Material  # noqa: F401
 from app.models.machine import Machine, MaintenanceTask  # noqa: F401
+from app.models.feeder import Feeder  # noqa: F401
 from app.models.software import Software, Subscription  # noqa: F401
 from app.models.proxmox import ProxmoxServer  # noqa: F401
 from app.models.supplier import Supplier, Manufacturer, SupplierPart, ManufacturerPart  # noqa: F401

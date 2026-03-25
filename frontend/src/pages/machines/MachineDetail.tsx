@@ -6,8 +6,18 @@ import {
   TrashIcon,
   ArrowLeftIcon,
   WrenchIcon,
+  PlusIcon,
+  CheckIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useMachine, useDeleteMachine, useMaintenanceTasks } from "../../api/machines";
+import {
+  useFeeders,
+  useCreateFeeder,
+  useUpdateFeeder,
+  useDeleteFeeder,
+} from "../../api/feeders";
+import type { Feeder, FeederCreate } from "../../types/feeder";
 import Button from "../../components/ui/button";
 import Badge from "../../components/ui/badge";
 import StatusBadge from "../../components/shared/StatusBadge";
@@ -25,6 +35,19 @@ export default function MachineDetail() {
   const { data: machine, isLoading } = useMachine(numericId);
   const { data: maintenance } = useMaintenanceTasks(numericId);
   const deleteMutation = useDeleteMachine();
+
+  // Feeder state (only used for Pick & Place machines)
+  const { data: feedersData, isLoading: feedersLoading } = useFeeders(numericId);
+  const feeders: Feeder[] = feedersData?.items || [];
+  const createFeeder = useCreateFeeder();
+  const updateFeeder = useUpdateFeeder();
+  const deleteFeeder = useDeleteFeeder();
+  const [showAddFeeder, setShowAddFeeder] = useState(false);
+  const [editingFeederId, setEditingFeederId] = useState<number | null>(null);
+  const [editFeederForm, setEditFeederForm] = useState<Partial<Feeder>>({});
+  const [addFeederForm, setAddFeederForm] = useState<Partial<FeederCreate>>({
+    slot_number: 1, nozzle: 1, mount_speed: 100, head: 0, pick_height: 0, place_height: 0,
+  });
 
   const handleDelete = async () => {
     try {
@@ -209,6 +232,202 @@ export default function MachineDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Feeder Configuration — only for Pick & Place machines */}
+      {machine.machine_type === "Pick & Place" && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Feeder Configuration</CardTitle>
+            <Button size="sm" onClick={() => setShowAddFeeder(!showAddFeeder)}>
+              <PlusIcon className="h-4 w-4 mr-1" />
+              Add Feeder
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {/* Add feeder form */}
+            {showAddFeeder && (
+              <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                <div className="text-sm font-medium">New Feeder Slot</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                  {([
+                    ["Slot #", "slot_number", "number", 1, 99],
+                    ["Value", "component_value", "text"],
+                    ["Package", "component_package", "text"],
+                    ["Part #", "part_number", "text"],
+                    ["Nozzle", "nozzle", "number", 1, 10],
+                    ["Speed %", "mount_speed", "number", 1, 100],
+                    ["Head", "head", "number", 0, 4],
+                  ] as const).map(([label, key, type, min, max]) => (
+                    <div key={key} className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{label}</label>
+                      <input
+                        type={type}
+                        {...(type === "number" ? { min, max } : {})}
+                        placeholder={type === "text" ? String(label) : undefined}
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        value={(addFeederForm as Record<string, unknown>)[key] ?? ""}
+                        onChange={(e) =>
+                          setAddFeederForm((prev) => ({
+                            ...prev,
+                            [key]: type === "number" ? (parseInt(e.target.value) || 0) : e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Notes</label>
+                  <input
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    placeholder="Optional notes..."
+                    value={addFeederForm.notes || ""}
+                    onChange={(e) => setAddFeederForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={createFeeder.isPending}
+                    onClick={() => {
+                      if (!addFeederForm.slot_number) { toast.error("Slot number is required"); return; }
+                      createFeeder.mutate(
+                        { ...addFeederForm, machine_id: numericId } as FeederCreate,
+                        {
+                          onSuccess: () => {
+                            toast.success(`Feeder slot ${addFeederForm.slot_number} added`);
+                            setShowAddFeeder(false);
+                            setAddFeederForm({
+                              slot_number: (addFeederForm.slot_number || 1) + 1,
+                              nozzle: 1, mount_speed: 100, head: 0, pick_height: 0, place_height: 0,
+                            });
+                          },
+                        }
+                      );
+                    }}
+                  >
+                    {createFeeder.isPending ? "Adding..." : "Add"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowAddFeeder(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {feedersLoading ? (
+              <p className="text-sm text-muted-foreground">Loading feeders...</p>
+            ) : feeders.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8 text-sm">
+                No feeders configured. Click "Add Feeder" to set up slots.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-xs uppercase text-muted-foreground tracking-wider">
+                      <th className="text-left py-2 pr-3">Slot</th>
+                      <th className="text-left py-2 pr-3">Value</th>
+                      <th className="text-left py-2 pr-3">Package</th>
+                      <th className="text-left py-2 pr-3">Part #</th>
+                      <th className="text-left py-2 pr-3">Nozzle</th>
+                      <th className="text-left py-2 pr-3">Speed</th>
+                      <th className="text-left py-2 pr-3">Head</th>
+                      <th className="text-left py-2 pr-3">Notes</th>
+                      <th className="text-right py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feeders.map((f) => (
+                      <tr key={f.id} className="border-b border-border/50 hover:bg-accent/50 transition-colors">
+                        {editingFeederId === f.id ? (
+                          <>
+                            {([
+                              ["slot_number", "number", "w-16"],
+                              ["component_value", "text", "w-24"],
+                              ["component_package", "text", "w-20"],
+                              ["part_number", "text", "w-24"],
+                              ["nozzle", "number", "w-14"],
+                              ["mount_speed", "number", "w-16"],
+                              ["head", "number", "w-14"],
+                              ["notes", "text", "w-32"],
+                            ] as const).map(([key, type, width]) => (
+                              <td key={key} className="py-2 pr-3">
+                                <input
+                                  type={type}
+                                  className={`${width} h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring`}
+                                  value={(editFeederForm as Record<string, unknown>)[key] ?? ""}
+                                  onChange={(e) =>
+                                    setEditFeederForm((prev) => ({
+                                      ...prev,
+                                      [key]: type === "number" ? (parseInt(e.target.value) || 0) : e.target.value,
+                                    }))
+                                  }
+                                />
+                              </td>
+                            ))}
+                            <td className="py-2 text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-500"
+                                  onClick={() => {
+                                    const { id: _id, machine_id: _mid, created_at: _c, updated_at: _u, ...payload } = editFeederForm as Feeder;
+                                    updateFeeder.mutate(
+                                      { id: editingFeederId, payload },
+                                      { onSuccess: () => { toast.success("Feeder updated"); setEditingFeederId(null); } }
+                                    );
+                                  }}
+                                >
+                                  <CheckIcon className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditingFeederId(null)}>
+                                  <XMarkIcon className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-2 pr-3 font-mono font-semibold">{f.slot_number}</td>
+                            <td className="py-2 pr-3">{f.component_value || <span className="text-muted-foreground">—</span>}</td>
+                            <td className="py-2 pr-3">
+                              {f.component_package ? <Badge variant="outline">{f.component_package}</Badge> : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="py-2 pr-3 font-mono text-xs">{f.part_number || <span className="text-muted-foreground">—</span>}</td>
+                            <td className="py-2 pr-3">{f.nozzle}</td>
+                            <td className="py-2 pr-3">{f.mount_speed}%</td>
+                            <td className="py-2 pr-3">{f.head}</td>
+                            <td className="py-2 pr-3 text-xs text-muted-foreground max-w-[200px] truncate">{f.notes || "—"}</td>
+                            <td className="py-2 text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost" size="sm" className="h-7 w-7 p-0"
+                                  onClick={() => { setEditingFeederId(f.id); setEditFeederForm({ ...f }); }}
+                                >
+                                  <PencilSquareIcon className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    if (!confirm(`Delete feeder slot ${f.slot_number}?`)) return;
+                                    deleteFeeder.mutate(f.id, { onSuccess: () => toast.success("Feeder deleted") });
+                                  }}
+                                >
+                                  <TrashIcon className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <ConfirmDialog
         open={showDelete}

@@ -17,6 +17,7 @@ from app.routers import (
     categories,
     components,
     dashboard,
+    feeders,
     footprints,
     invoices,
     machines,
@@ -117,6 +118,7 @@ app.include_router(invoices.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")
 app.include_router(materials.router, prefix="/api/v1")
 app.include_router(machines.router, prefix="/api/v1")
+app.include_router(feeders.router, prefix="/api/v1")
 app.include_router(maintenance.router, prefix="/api/v1")
 app.include_router(software.router, prefix="/api/v1")
 app.include_router(subscriptions.router, prefix="/api/v1")
