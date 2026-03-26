@@ -5,6 +5,7 @@ export interface Feeder {
   component_value?: string;
   component_package?: string;
   part_number?: string;
+  supplier_part_number?: string;
   nozzle: number;
   pick_height: number;
   place_height: number;
@@ -21,6 +22,7 @@ export interface FeederCreate {
   component_value?: string;
   component_package?: string;
   part_number?: string;
+  supplier_part_number?: string;
   nozzle?: number;
   pick_height?: number;
   place_height?: number;

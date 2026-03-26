@@ -15,6 +15,7 @@ import {
   useDeleteFeeder,
 } from "../../api/feeders";
 import type { Feeder, FeederCreate } from "../../types/feeder";
+import type { Component } from "../../types/component";
 import { Button } from "../../components/ui/button";
 import {
   Card,
@@ -24,6 +25,7 @@ import {
 } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import Select from "../../components/ui/select";
+import ComponentPicker from "../../components/ui/ComponentPicker";
 
 export default function FeederConfig() {
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(
@@ -40,6 +42,10 @@ export default function FeederConfig() {
     pick_height: 0,
     place_height: 0,
   });
+  const [addSelectedComponent, setAddSelectedComponent] =
+    useState<Component | null>(null);
+  const [editSelectedComponent, setEditSelectedComponent] =
+    useState<Component | null>(null);
 
   const { data: machinesData } = useMachines({ page_size: 200 });
   const pnpMachines = (machinesData?.items || []).filter(
@@ -60,6 +66,32 @@ export default function FeederConfig() {
     label: `${m.name}${m.model ? ` (${m.model})` : ""}`,
   }));
 
+  function handleAddComponentSelect(comp: Component | null) {
+    setAddSelectedComponent(comp);
+    if (comp) {
+      setAddForm((prev) => ({
+        ...prev,
+        component_value: comp.name,
+        component_package: comp.package_type || prev.component_package,
+        part_number: comp.mpn || comp.manufacturer_part_number || prev.part_number,
+        supplier_part_number: comp.supplier_part_number || prev.supplier_part_number,
+      }));
+    }
+  }
+
+  function handleEditComponentSelect(comp: Component | null) {
+    setEditSelectedComponent(comp);
+    if (comp) {
+      setEditForm((prev) => ({
+        ...prev,
+        component_value: comp.name,
+        component_package: comp.package_type || prev.component_package,
+        part_number: comp.mpn || comp.manufacturer_part_number || prev.part_number,
+        supplier_part_number: comp.supplier_part_number || prev.supplier_part_number,
+      }));
+    }
+  }
+
   function handleAdd() {
     if (!selectedMachineId) return;
     if (!addForm.slot_number) {
@@ -72,6 +104,7 @@ export default function FeederConfig() {
         onSuccess: () => {
           toast.success(`Feeder slot ${addForm.slot_number} added`);
           setShowAdd(false);
+          setAddSelectedComponent(null);
           setAddForm({
             slot_number: (addForm.slot_number || 1) + 1,
             nozzle: 1,
@@ -88,6 +121,7 @@ export default function FeederConfig() {
   function startEdit(feeder: Feeder) {
     setEditingId(feeder.id);
     setEditForm({ ...feeder });
+    setEditSelectedComponent(null);
   }
 
   function handleSaveEdit() {
@@ -191,20 +225,14 @@ export default function FeederConfig() {
                       }
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 col-span-2 md:col-span-2 lg:col-span-2">
                     <label className="text-xs text-muted-foreground">
-                      Value
+                      Component
                     </label>
-                    <input
-                      className={inputClass + " w-full"}
-                      placeholder="e.g. 100nF"
-                      value={addForm.component_value || ""}
-                      onChange={(e) =>
-                        setAddForm({
-                          ...addForm,
-                          component_value: e.target.value,
-                        })
-                      }
+                    <ComponentPicker
+                      value={addSelectedComponent}
+                      onChange={handleAddComponentSelect}
+                      placeholder="Search components..."
                     />
                   </div>
                   <div className="space-y-1">
@@ -235,6 +263,22 @@ export default function FeederConfig() {
                         setAddForm({
                           ...addForm,
                           part_number: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      Supplier Part #
+                    </label>
+                    <input
+                      className={inputClass + " w-full"}
+                      placeholder="SPN"
+                      value={addForm.supplier_part_number || ""}
+                      onChange={(e) =>
+                        setAddForm({
+                          ...addForm,
+                          supplier_part_number: e.target.value,
                         })
                       }
                     />
@@ -336,6 +380,7 @@ export default function FeederConfig() {
                       <th className="text-left py-2 pr-3">Value</th>
                       <th className="text-left py-2 pr-3">Package</th>
                       <th className="text-left py-2 pr-3">Part #</th>
+                      <th className="text-left py-2 pr-3">Supplier Part #</th>
                       <th className="text-left py-2 pr-3">Nozzle</th>
                       <th className="text-left py-2 pr-3">Speed</th>
                       <th className="text-left py-2 pr-3">Head</th>
@@ -366,28 +411,12 @@ export default function FeederConfig() {
                                 }
                               />
                             </td>
-                            <td className="py-2 pr-3">
-                              <input
-                                className={inputClass + " w-24"}
-                                value={editForm.component_value || ""}
-                                onChange={(e) =>
-                                  setEditForm({
-                                    ...editForm,
-                                    component_value: e.target.value,
-                                  })
-                                }
-                              />
-                            </td>
-                            <td className="py-2 pr-3">
-                              <input
-                                className={inputClass + " w-20"}
-                                value={editForm.component_package || ""}
-                                onChange={(e) =>
-                                  setEditForm({
-                                    ...editForm,
-                                    component_package: e.target.value,
-                                  })
-                                }
+                            <td className="py-2 pr-3" colSpan={2}>
+                              <ComponentPicker
+                                value={editSelectedComponent}
+                                onChange={handleEditComponentSelect}
+                                placeholder={editForm.component_value || "Search..."}
+                                inputClassName="w-48"
                               />
                             </td>
                             <td className="py-2 pr-3">
@@ -398,6 +427,18 @@ export default function FeederConfig() {
                                   setEditForm({
                                     ...editForm,
                                     part_number: e.target.value,
+                                  })
+                                }
+                              />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input
+                                className={inputClass + " w-24"}
+                                value={editForm.supplier_part_number || ""}
+                                onChange={(e) =>
+                                  setEditForm({
+                                    ...editForm,
+                                    supplier_part_number: e.target.value,
                                   })
                                 }
                               />
@@ -504,6 +545,13 @@ export default function FeederConfig() {
                             </td>
                             <td className="py-2 pr-3 font-mono text-xs">
                               {f.part_number || (
+                                <span className="text-muted-foreground">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 pr-3 font-mono text-xs">
+                              {f.supplier_part_number || (
                                 <span className="text-muted-foreground">
                                   —
                                 </span>

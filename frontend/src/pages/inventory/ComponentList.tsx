@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { useComponents } from "../../api/components";
-import { COMPONENT_CATEGORIES } from "../../types/component";
+import { useCategories } from "../../api/categories";
 import type { Component } from "../../types/component";
 import Table, { type Column } from "../../components/ui/table";
 import Button from "../../components/ui/button";
@@ -24,9 +24,12 @@ export default function ComponentList() {
     page,
     page_size: 20,
     search: search || undefined,
+    category: category || undefined,
     sort_by: sortBy,
     sort_order: sortOrder,
   });
+
+  const { data: categories } = useCategories(0);
 
   const handleSort = useCallback(
     (key: string) => {
@@ -104,14 +107,14 @@ export default function ComponentList() {
     },
   ];
 
-  const filteredData = category
-    ? (data?.items || []).filter((c) => c.category === category)
-    : data?.items || [];
-
-  const categoryOptions = COMPONENT_CATEGORIES.map((c) => ({
-    value: c,
-    label: c,
-  }));
+  const categoryOptions = useMemo(
+    () =>
+      (categories || []).map((c) => ({
+        value: c.name,
+        label: c.name,
+      })),
+    [categories]
+  );
 
   return (
     <div className="space-y-6">
@@ -157,7 +160,7 @@ export default function ComponentList() {
 
       <Table
         columns={columns}
-        data={filteredData}
+        data={data?.items || []}
         loading={isLoading}
         rowKey={(item) => item.id}
         onRowClick={(item) => navigate(`/inventory/${item.id}`)}

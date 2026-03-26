@@ -14,6 +14,7 @@ class Feeder(Base):
     component_value = Column(String(255), nullable=True)
     component_package = Column(String(100), nullable=True)
     part_number = Column(String(100), nullable=True)
+    supplier_part_number = Column(String(100), nullable=True)
     nozzle = Column(Integer, default=1)
     pick_height = Column(Float, default=0.0)
     place_height = Column(Float, default=0.0)

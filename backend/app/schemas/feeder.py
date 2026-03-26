@@ -10,6 +10,7 @@ class FeederBase(BaseModel):
     component_value: Optional[str] = None
     component_package: Optional[str] = None
     part_number: Optional[str] = None
+    supplier_part_number: Optional[str] = None
     nozzle: int = 1
     pick_height: float = 0.0
     place_height: float = 0.0
@@ -27,6 +28,7 @@ class FeederUpdate(BaseModel):
     component_value: Optional[str] = None
     component_package: Optional[str] = None
     part_number: Optional[str] = None
+    supplier_part_number: Optional[str] = None
     nozzle: Optional[int] = None
     pick_height: Optional[float] = None
     place_height: Optional[float] = None

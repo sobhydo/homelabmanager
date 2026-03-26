@@ -18,10 +18,12 @@ import {
   useDeleteFeeder,
 } from "../../api/feeders";
 import type { Feeder, FeederCreate } from "../../types/feeder";
+import type { Component } from "../../types/component";
 import Button from "../../components/ui/button";
 import Badge from "../../components/ui/badge";
 import StatusBadge from "../../components/shared/StatusBadge";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
+import ComponentPicker from "../../components/ui/ComponentPicker";
 import toast from "react-hot-toast";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +50,34 @@ export default function MachineDetail() {
   const [addFeederForm, setAddFeederForm] = useState<Partial<FeederCreate>>({
     slot_number: 1, nozzle: 1, mount_speed: 100, head: 0, pick_height: 0, place_height: 0,
   });
+  const [addSelectedComponent, setAddSelectedComponent] = useState<Component | null>(null);
+  const [editSelectedComponent, setEditSelectedComponent] = useState<Component | null>(null);
+
+  function handleAddComponentSelect(comp: Component | null) {
+    setAddSelectedComponent(comp);
+    if (comp) {
+      setAddFeederForm((prev) => ({
+        ...prev,
+        component_value: comp.name,
+        component_package: comp.package_type || prev.component_package,
+        part_number: comp.mpn || comp.manufacturer_part_number || prev.part_number,
+        supplier_part_number: comp.supplier_part_number || prev.supplier_part_number,
+      }));
+    }
+  }
+
+  function handleEditComponentSelect(comp: Component | null) {
+    setEditSelectedComponent(comp);
+    if (comp) {
+      setEditFeederForm((prev) => ({
+        ...prev,
+        component_value: comp.name,
+        component_package: comp.package_type || prev.component_package,
+        part_number: comp.mpn || comp.manufacturer_part_number || prev.part_number,
+        supplier_part_number: comp.supplier_part_number || prev.supplier_part_number,
+      }));
+    }
+  }
 
   const handleDelete = async () => {
     try {
@@ -249,32 +279,38 @@ export default function MachineDetail() {
               <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
                 <div className="text-sm font-medium">New Feeder Slot</div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                  {([
-                    ["Slot #", "slot_number", "number", 1, 99],
-                    ["Value", "component_value", "text"],
-                    ["Package", "component_package", "text"],
-                    ["Part #", "part_number", "text"],
-                    ["Nozzle", "nozzle", "number", 1, 10],
-                    ["Speed %", "mount_speed", "number", 1, 100],
-                    ["Head", "head", "number", 0, 4],
-                  ] as const).map(([label, key, type, min, max]) => (
-                    <div key={key} className="space-y-1">
-                      <label className="text-xs text-muted-foreground">{label}</label>
-                      <input
-                        type={type}
-                        {...(type === "number" ? { min, max } : {})}
-                        placeholder={type === "text" ? String(label) : undefined}
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        value={(addFeederForm as Record<string, unknown>)[key] ?? ""}
-                        onChange={(e) =>
-                          setAddFeederForm((prev) => ({
-                            ...prev,
-                            [key]: type === "number" ? (parseInt(e.target.value) || 0) : e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Slot #</label>
+                    <input type="number" min={1} max={99} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={addFeederForm.slot_number ?? ""} onChange={(e) => setAddFeederForm((prev) => ({ ...prev, slot_number: parseInt(e.target.value) || 0 }))} />
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-xs text-muted-foreground">Component</label>
+                    <ComponentPicker value={addSelectedComponent} onChange={handleAddComponentSelect} placeholder="Search components..." />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Package</label>
+                    <input className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" placeholder="Package" value={addFeederForm.component_package ?? ""} onChange={(e) => setAddFeederForm((prev) => ({ ...prev, component_package: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Part #</label>
+                    <input className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" placeholder="MPN" value={addFeederForm.part_number ?? ""} onChange={(e) => setAddFeederForm((prev) => ({ ...prev, part_number: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Supplier Part #</label>
+                    <input className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" placeholder="SPN" value={addFeederForm.supplier_part_number ?? ""} onChange={(e) => setAddFeederForm((prev) => ({ ...prev, supplier_part_number: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Nozzle</label>
+                    <input type="number" min={1} max={10} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={addFeederForm.nozzle ?? 1} onChange={(e) => setAddFeederForm((prev) => ({ ...prev, nozzle: parseInt(e.target.value) || 1 }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Speed %</label>
+                    <input type="number" min={1} max={100} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={addFeederForm.mount_speed ?? 100} onChange={(e) => setAddFeederForm((prev) => ({ ...prev, mount_speed: parseInt(e.target.value) || 100 }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Head</label>
+                    <input type="number" min={0} max={4} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={addFeederForm.head ?? 0} onChange={(e) => setAddFeederForm((prev) => ({ ...prev, head: parseInt(e.target.value) || 0 }))} />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs text-muted-foreground">Notes</label>
@@ -297,6 +333,7 @@ export default function MachineDetail() {
                           onSuccess: () => {
                             toast.success(`Feeder slot ${addFeederForm.slot_number} added`);
                             setShowAddFeeder(false);
+                            setAddSelectedComponent(null);
                             setAddFeederForm({
                               slot_number: (addFeederForm.slot_number || 1) + 1,
                               nozzle: 1, mount_speed: 100, head: 0, pick_height: 0, place_height: 0,
@@ -330,6 +367,7 @@ export default function MachineDetail() {
                       <th className="text-left py-2 pr-3">Value</th>
                       <th className="text-left py-2 pr-3">Package</th>
                       <th className="text-left py-2 pr-3">Part #</th>
+                      <th className="text-left py-2 pr-3">Supplier Part #</th>
                       <th className="text-left py-2 pr-3">Nozzle</th>
                       <th className="text-left py-2 pr-3">Speed</th>
                       <th className="text-left py-2 pr-3">Head</th>
@@ -342,30 +380,30 @@ export default function MachineDetail() {
                       <tr key={f.id} className="border-b border-border/50 hover:bg-accent/50 transition-colors">
                         {editingFeederId === f.id ? (
                           <>
-                            {([
-                              ["slot_number", "number", "w-16"],
-                              ["component_value", "text", "w-24"],
-                              ["component_package", "text", "w-20"],
-                              ["part_number", "text", "w-24"],
-                              ["nozzle", "number", "w-14"],
-                              ["mount_speed", "number", "w-16"],
-                              ["head", "number", "w-14"],
-                              ["notes", "text", "w-32"],
-                            ] as const).map(([key, type, width]) => (
-                              <td key={key} className="py-2 pr-3">
-                                <input
-                                  type={type}
-                                  className={`${width} h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring`}
-                                  value={(editFeederForm as Record<string, unknown>)[key] ?? ""}
-                                  onChange={(e) =>
-                                    setEditFeederForm((prev) => ({
-                                      ...prev,
-                                      [key]: type === "number" ? (parseInt(e.target.value) || 0) : e.target.value,
-                                    }))
-                                  }
-                                />
-                              </td>
-                            ))}
+                            <td className="py-2 pr-3">
+                              <input type="number" min={1} className="w-16 h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={editFeederForm.slot_number ?? ""} onChange={(e) => setEditFeederForm((prev) => ({ ...prev, slot_number: parseInt(e.target.value) || 0 }))} />
+                            </td>
+                            <td className="py-2 pr-3" colSpan={2}>
+                              <ComponentPicker value={editSelectedComponent} onChange={handleEditComponentSelect} placeholder={editFeederForm.component_value || "Search..."} inputClassName="w-48" />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input className="w-24 h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={editFeederForm.part_number ?? ""} onChange={(e) => setEditFeederForm((prev) => ({ ...prev, part_number: e.target.value }))} />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input className="w-24 h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={editFeederForm.supplier_part_number ?? ""} onChange={(e) => setEditFeederForm((prev) => ({ ...prev, supplier_part_number: e.target.value }))} />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input type="number" min={1} className="w-14 h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={editFeederForm.nozzle ?? 1} onChange={(e) => setEditFeederForm((prev) => ({ ...prev, nozzle: parseInt(e.target.value) || 1 }))} />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input type="number" min={1} max={100} className="w-16 h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={editFeederForm.mount_speed ?? 100} onChange={(e) => setEditFeederForm((prev) => ({ ...prev, mount_speed: parseInt(e.target.value) || 100 }))} />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input type="number" min={0} className="w-14 h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={editFeederForm.head ?? 0} onChange={(e) => setEditFeederForm((prev) => ({ ...prev, head: parseInt(e.target.value) || 0 }))} />
+                            </td>
+                            <td className="py-2 pr-3">
+                              <input className="w-32 h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={editFeederForm.notes ?? ""} onChange={(e) => setEditFeederForm((prev) => ({ ...prev, notes: e.target.value }))} />
+                            </td>
                             <td className="py-2 text-right">
                               <div className="flex justify-end gap-1">
                                 <Button
@@ -394,6 +432,7 @@ export default function MachineDetail() {
                               {f.component_package ? <Badge variant="outline">{f.component_package}</Badge> : <span className="text-muted-foreground">—</span>}
                             </td>
                             <td className="py-2 pr-3 font-mono text-xs">{f.part_number || <span className="text-muted-foreground">—</span>}</td>
+                            <td className="py-2 pr-3 font-mono text-xs">{f.supplier_part_number || <span className="text-muted-foreground">—</span>}</td>
                             <td className="py-2 pr-3">{f.nozzle}</td>
                             <td className="py-2 pr-3">{f.mount_speed}%</td>
                             <td className="py-2 pr-3">{f.head}</td>
@@ -402,7 +441,7 @@ export default function MachineDetail() {
                               <div className="flex justify-end gap-1">
                                 <Button
                                   variant="ghost" size="sm" className="h-7 w-7 p-0"
-                                  onClick={() => { setEditingFeederId(f.id); setEditFeederForm({ ...f }); }}
+                                  onClick={() => { setEditingFeederId(f.id); setEditFeederForm({ ...f }); setEditSelectedComponent(null); }}
                                 >
                                   <PencilSquareIcon className="h-3.5 w-3.5" />
                                 </Button>

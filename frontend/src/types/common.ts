@@ -10,6 +10,7 @@ export interface PaginationParams {
   page?: number;
   page_size?: number;
   search?: string;
+  category?: string;
   sort_by?: string;
   sort_order?: "asc" | "desc";
 }
