@@ -27,6 +27,7 @@ from app.routers import (
     pnp,
     proxmox,
     saved_files,
+    saved_labels,
     software,
     stock_items,
     stock_locations,
@@ -139,6 +140,7 @@ app.include_router(audit_logs.router, prefix="/api/v1")
 app.include_router(pnp.router, prefix="/api/v1")
 app.include_router(saved_files.router, prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
+app.include_router(saved_labels.router, prefix="/api/v1")
 
 
 @app.get("/")

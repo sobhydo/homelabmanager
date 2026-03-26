@@ -18,6 +18,7 @@ import {
   MapPinIcon,
   ArchiveBoxIcon,
   QueueListIcon,
+  TagIcon,
   FolderIcon,
   RectangleStackIcon,
   UsersIcon,
@@ -88,6 +89,7 @@ const sections: NavSection[] = [
       { to: "/materials", label: "Materials", icon: CubeIcon, end: true },
       { to: "/tools/pnp-converter", label: "P&P Converter", icon: ArrowsPointingOutIcon },
       { to: "/tools/interactive-bom", label: "Interactive BOM", icon: ClipboardDocumentListIcon },
+      { to: "/tools/label-maker", label: "Label Maker", icon: TagIcon },
     ],
   },
   {
