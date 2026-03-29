@@ -22,7 +22,8 @@ async def parse_invoice_pdf(file_path: str, api_key: str) -> dict[str, Any]:
         - supplier
         - total_amount
         - currency
-        - items: list of dicts with description, part_number, quantity, unit_price, total_price
+        - items: list of dicts with description, part_number, supplier_part_number,
+          quantity, unit_price, total_price
     """
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY is not configured")
@@ -36,7 +37,7 @@ async def parse_invoice_pdf(file_path: str, api_key: str) -> dict[str, Any]:
 
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=4096,
+        max_tokens=8192,
         messages=[
             {
                 "role": "user",
@@ -52,24 +53,35 @@ async def parse_invoice_pdf(file_path: str, api_key: str) -> dict[str, Any]:
                     {
                         "type": "text",
                         "text": (
-                            "Extract the following information from this invoice and return it as JSON only "
-                            "(no markdown, no explanation):\n\n"
+                            "Extract ALL information from this invoice/packing list and return it as JSON only "
+                            "(no markdown, no explanation).\n\n"
+                            "IMPORTANT extraction rules:\n"
+                            "- For LCSC packing lists: the 'LCSC Part #' column (e.g. C1523, C15008) is the "
+                            "supplier_part_number. The 'Mfr. Part #' is the part_number (MPN).\n"
+                            "- Extract EVERY line item, even if spanning multiple pages.\n"
+                            "- For the description, include the component value and specifications.\n"
+                            "- If there is a 'Customer #' or reference designator field, include it in the description.\n"
+                            "- Extract the order/reference number as invoice_number.\n"
+                            "- Look for the LCSC Order No. Reference at the bottom of the document.\n\n"
+                            "Return this exact JSON structure:\n"
                             "{\n"
-                            '  "invoice_number": "string or null",\n'
-                            '  "supplier": "string or null",\n'
+                            '  "invoice_number": "string or null (order/reference number)",\n'
+                            '  "supplier": "string or null (e.g. LCSC, Mouser, DigiKey)",\n'
                             '  "invoice_date": "YYYY-MM-DD or null",\n'
                             '  "total_amount": number_or_null,\n'
                             '  "currency": "USD",\n'
                             '  "items": [\n'
                             "    {\n"
-                            '      "description": "string",\n'
-                            '      "part_number": "string or null",\n'
+                            '      "description": "full component description including value, package, specs",\n'
+                            '      "part_number": "manufacturer part number (MPN) or null",\n'
+                            '      "supplier_part_number": "supplier catalog number (e.g. LCSC C1523, Mouser #) or null",\n'
                             '      "quantity": number,\n'
                             '      "unit_price": number_or_null,\n'
                             '      "total_price": number_or_null\n'
                             "    }\n"
                             "  ]\n"
-                            "}"
+                            "}\n\n"
+                            "Extract ALL items from ALL pages. Do not truncate or summarize."
                         ),
                     },
                 ],

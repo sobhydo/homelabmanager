@@ -22,6 +22,14 @@ class InvoiceItemResponse(InvoiceItemBase):
     invoice_id: int
     component_id: Optional[int] = None
     matched: int = 0
+    added_to_stock: int = 0
+    suggested_category: Optional[str] = None
+    suggested_package: Optional[str] = None
+    supplier_part_number: Optional[str] = None
+    manufacturer: Optional[str] = None
+    notes: Optional[str] = None
+    supplier_url: Optional[str] = None
+    footprint: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

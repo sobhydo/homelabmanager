@@ -151,7 +151,7 @@ export default function ComponentForm() {
         await createMutation.mutateAsync(payload);
         toast.success("Component created successfully.");
       }
-      navigate("/inventory");
+      navigate(-1);
     } catch {
       // Error handled by interceptor
     }
@@ -412,7 +412,7 @@ export default function ComponentForm() {
             value={form.unit_price}
             onChange={handleChange}
             min={0}
-            step={0.01}
+            step="any"
           />
           <Input
             label="Supplier"

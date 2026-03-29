@@ -172,7 +172,7 @@ export default function ComponentDetail() {
     <div className="max-w-5xl space-y-6">
       {/* Header Actions */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/inventory")}>
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeftIcon className="h-4 w-4" />
           Back
         </Button>

@@ -157,6 +157,13 @@ def update_component(
     for field, value in update_data.items():
         setattr(component, field, value)
 
+    # Keep category string in sync with category_id
+    if "category_id" in update_data and component.category_id:
+        from app.models.category import Category
+        cat = db.query(Category).filter(Category.id == component.category_id).first()
+        if cat:
+            component.category = cat.name
+
     db.commit()
     db.refresh(component)
     return _enrich_component(component)

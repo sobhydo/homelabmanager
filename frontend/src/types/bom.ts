@@ -74,6 +74,10 @@ export interface InvoiceItem {
   total_price?: number;
   component_id?: number;
   matched: number;
+  added_to_stock: number;
+  suggested_category?: string;
+  suggested_package?: string;
+  supplier_part_number?: string;
   created_at?: string;
 }
 

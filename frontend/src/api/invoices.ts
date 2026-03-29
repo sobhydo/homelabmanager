@@ -53,12 +53,49 @@ export function useUploadInvoice() {
   });
 }
 
+export function useUploadMultipleInvoices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (files: File[]) => {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("files", file);
+      }
+      const { data } = await apiClient.post<Invoice[]>(
+        "/invoices/upload-multiple",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.lists() });
+    },
+  });
+}
+
 export function useProcessInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
       const { data } = await apiClient.post<Invoice>(
         `/invoices/${id}/process`
+      );
+      return data;
+    },
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: KEYS.detail(id) });
+      qc.invalidateQueries({ queryKey: KEYS.lists() });
+    },
+  });
+}
+
+export function useImportToInventory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const { data } = await apiClient.post<Invoice>(
+        `/invoices/${id}/import-to-inventory`
       );
       return data;
     },

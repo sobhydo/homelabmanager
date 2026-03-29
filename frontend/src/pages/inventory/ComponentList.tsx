@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useMemo, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { useComponents } from "../../api/components";
 import { useCategories } from "../../api/categories";
@@ -14,11 +14,60 @@ import Badge from "../../components/ui/badge";
 
 export default function ComponentList() {
   const navigate = useNavigate();
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
-  const [sortBy, setSortBy] = useState("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Read values from URL
+  const page = Number(searchParams.get("page")) || 1;
+  const search = searchParams.get("search") || "";
+  const category = searchParams.get("category") || "";
+  const sortBy = searchParams.get("sort_by") || "name";
+  const sortOrder = (searchParams.get("sort_order") as "asc" | "desc") || "asc";
+
+  // Use a ref to always have the latest searchParams without triggering re-renders
+  const paramsRef = useRef(searchParams);
+  paramsRef.current = searchParams;
+
+  const updateParams = useCallback(
+    (updates: Record<string, string | undefined>) => {
+      const next = new URLSearchParams(paramsRef.current);
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) {
+          next.set(key, value);
+        } else {
+          next.delete(key);
+        }
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [setSearchParams]
+  );
+
+  const setPage = useCallback(
+    (p: number) => updateParams({ page: p > 1 ? String(p) : undefined }),
+    [updateParams]
+  );
+
+  const handleSort = useCallback(
+    (key: string) => {
+      const currentSort = paramsRef.current.get("sort_by") || "name";
+      const currentOrder = paramsRef.current.get("sort_order") || "asc";
+      if (currentSort === key) {
+        updateParams({ sort_order: currentOrder === "asc" ? "desc" : "asc" });
+      } else {
+        updateParams({ sort_by: key, sort_order: "asc" });
+      }
+    },
+    [updateParams]
+  );
+
+  const handleSearch = useCallback(
+    (value: string) => {
+      const current = paramsRef.current.get("search") || "";
+      if (value === current) return; // no change, skip
+      updateParams({ search: value || undefined, page: undefined });
+    },
+    [updateParams]
+  );
 
   const { data, isLoading } = useComponents({
     page,
@@ -30,23 +79,6 @@ export default function ComponentList() {
   });
 
   const { data: categories } = useCategories(0);
-
-  const handleSort = useCallback(
-    (key: string) => {
-      if (sortBy === key) {
-        setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
-      } else {
-        setSortBy(key);
-        setSortOrder("asc");
-      }
-    },
-    [sortBy]
-  );
-
-  const handleSearch = useCallback((value: string) => {
-    setSearch(value);
-    setPage(1);
-  }, []);
 
   const columns: Column<Component>[] = [
     {
@@ -69,7 +101,7 @@ export default function ComponentList() {
       key: "category",
       header: "Category",
       sortable: true,
-      render: (item) => <Badge color="indigo">{item.category}</Badge>,
+      render: (item) => <Badge color="indigo">{item.category_name || item.category || "-"}</Badge>,
     },
     {
       key: "quantity",
@@ -150,8 +182,7 @@ export default function ComponentList() {
           options={categoryOptions}
           value={category}
           onChange={(e) => {
-            setCategory(e.target.value);
-            setPage(1);
+            updateParams({ category: e.target.value || undefined, page: undefined });
           }}
           placeholder="All Categories"
           className="w-full sm:w-48"

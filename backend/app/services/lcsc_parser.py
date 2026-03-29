@@ -2,7 +2,10 @@
 
 import csv
 import io
+import re
 from typing import Any
+
+from app.services.category_classifier import classify_component
 
 
 LCSC_HEADERS = {
@@ -24,15 +27,42 @@ def is_lcsc_csv(content: str) -> bool:
         return False
 
 
+def _extract_component_name(description: str, mpn: str, package: str) -> str:
+    """Build a concise component name from CSV fields.
+
+    For passives: "100nF 0402 X7R 16V" style
+    For ICs: description truncated
+    """
+    if not description:
+        return mpn or "Unknown"
+
+    # The CSV description is usually good enough as-is, just trim it
+    name = description.strip()
+    if len(name) > 200:
+        name = name[:200]
+    return name
+
+
+def _build_supplier_url(lcsc_pn: str) -> str:
+    """Build an LCSC product page URL from the part number."""
+    if lcsc_pn:
+        return f"https://www.lcsc.com/product-detail/{lcsc_pn}.html"
+    return ""
+
+
 def parse_lcsc_csv(content: str, filename: str = "") -> dict[str, Any]:
     """Parse an LCSC order CSV and return structured invoice data.
 
-    Args:
-        content: Raw CSV text content.
-        filename: Original filename (used to derive invoice number).
-
-    Returns:
-        Dict matching the same shape as parse_invoice_pdf output.
+    Extracts as much info as possible to map to the Component model:
+    - name: from description
+    - manufacturer_part_number / mpn: from MPN column
+    - supplier_part_number: LCSC Part Number
+    - manufacturer: from Manufacturer column
+    - package_type: from Package column
+    - category / suggested_category: auto-classified
+    - notes: Customer NO. (reference designators)
+    - supplier_url: built from LCSC part number
+    - unit_price / total_price
     """
     reader = csv.DictReader(io.StringIO(content))
 
@@ -65,25 +95,39 @@ def parse_lcsc_csv(content: str, filename: str = "") -> dict[str, Any]:
         customer_no = row.get("Customer NO.", "").strip()
         package = row.get("Package", "").strip()
         description = row.get("Description", "").strip()
+        rohs = row.get("RoHS", "").strip()
 
-        # Build a useful description line
-        desc_parts = []
-        if description:
-            desc_parts.append(description)
-        if package:
-            desc_parts.append(f"[{package}]")
+        # Classify the component
+        category, detected_package = classify_component(description, mfr_pn)
+        # Prefer CSV package field over regex-detected one
+        final_package = package if package and package != "-" else detected_package
+
+        # Build a clean name
+        name = _extract_component_name(description, mfr_pn, package)
+
+        # Build notes from customer reference designators
+        notes_parts = []
         if customer_no:
-            desc_parts.append(f"Ref: {customer_no}")
+            notes_parts.append(f"Ref: {customer_no}")
+        if rohs and rohs.upper() == "YES":
+            notes_parts.append("RoHS")
 
         items.append({
-            "description": " ".join(desc_parts) if desc_parts else mfr_pn or lcsc_pn,
-            "part_number": mfr_pn or lcsc_pn,
+            "description": description or name,
+            "part_number": mfr_pn or None,
+            "supplier_part_number": lcsc_pn or None,
+            "lcsc_part_number": lcsc_pn or None,
             "quantity": qty,
             "unit_price": unit_price,
             "total_price": ext_price,
-            "lcsc_part_number": lcsc_pn,
-            "manufacturer": manufacturer,
-            "customer_no": customer_no,
+            "suggested_category": category,
+            "suggested_package": final_package,
+            # Extra fields for component creation
+            "manufacturer": manufacturer or None,
+            "customer_no": customer_no or None,
+            "notes": "; ".join(notes_parts) if notes_parts else None,
+            "name": name,
+            "supplier_url": _build_supplier_url(lcsc_pn),
         })
 
         total += ext_price
@@ -91,10 +135,8 @@ def parse_lcsc_csv(content: str, filename: str = "") -> dict[str, Any]:
     # Derive invoice number from filename if possible
     invoice_number = None
     if filename:
-        # LCSC filenames: LCSC__WM2602110063_20260323200540.csv
         name = filename.replace(".csv", "").replace(".CSV", "")
         parts = name.split("_")
-        # Find the order-number-looking segment (starts with WM or is long numeric)
         for p in parts:
             if p.startswith("WM") or (p.isdigit() and len(p) > 6):
                 invoice_number = p
