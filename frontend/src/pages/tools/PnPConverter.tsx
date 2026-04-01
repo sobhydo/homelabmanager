@@ -7,6 +7,7 @@ import {
   PlusIcon,
   ArrowDownTrayIcon,
   ArrowPathIcon,
+  SparklesIcon,
   BookmarkIcon,
   FolderOpenIcon,
 } from "@heroicons/react/24/outline";
@@ -143,6 +144,8 @@ export default function PnPConverter() {
     Record<string, { feederNo: number; skip: boolean; head: number; mountSpeed: number }>
   >({});
   const [showSavedSessions, setShowSavedSessions] = useState(false);
+  // CSV calibration: all matched points from uploaded CSV, with selection
+  const [csvCalibrationPoints, setCsvCalibrationPoints] = useState<(CalibrationPoint & { selected: boolean })[]>([]);
 
   // Feeder configuration
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
@@ -307,45 +310,126 @@ export default function PnPConverter() {
     }
   }
 
+  // ---- ASCII sanitizer for P&P machine compatibility ----
+  const UNICODE_MAP: Record<string, string> = {
+    "Ω": "ohm", "\u2126": "ohm", "μ": "u", "µ": "u", "±": "+-",
+    "°": "deg", "℃": "degC", "℉": "degF", "²": "2", "³": "3",
+    "×": "x", "–": "-", "—": "-", "\u2018": "'", "\u2019": "'",
+    "\u201C": '"', "\u201D": '"', "…": "...", "≥": ">=", "≤": "<=",
+  };
+
+  function quickAscii(str: string): string {
+    let out = str;
+    for (const [k, v] of Object.entries(UNICODE_MAP)) {
+      out = out.replaceAll(k, v);
+    }
+    return out;
+  }
+
+  function hasNonAscii(str: string): boolean {
+    return /[^\x00-\x7F]/.test(str);
+  }
+
+  async function ensureAsciiComponents(): Promise<typeof components> {
+    // Quick pass: replace known Unicode symbols
+    let cleaned = components.map((c) => ({
+      ...c,
+      value: c.value ? quickAscii(c.value) : c.value,
+      package: c.package ? quickAscii(c.package) : c.package,
+      designator: quickAscii(c.designator),
+    }));
+
+    // Check if any non-ASCII remains (Chinese, Arabic, etc.)
+    const needsAi = cleaned.filter(
+      (c) => hasNonAscii(c.value || "") || hasNonAscii(c.package || "") || hasNonAscii(c.designator)
+    );
+
+    if (needsAi.length === 0) return cleaned;
+
+    // Use AI to transliterate remaining non-ASCII
+    try {
+      const toFix = needsAi.map((c) => ({
+        designator: c.designator,
+        value: c.value,
+        package: c.package,
+      }));
+      const { data } = await apiClient.post<{
+        items: Array<{ designator: string; value: string; package: string }>;
+      }>("/pnp/ascii-convert", { items: toFix });
+
+      const fixMap = new Map(data.items.map((i) => [i.designator, i]));
+      cleaned = cleaned.map((c) => {
+        const fix = fixMap.get(c.designator);
+        if (fix) {
+          return {
+            ...c,
+            designator: fix.designator,
+            value: fix.value || c.value,
+            package: fix.package || c.package,
+          };
+        }
+        return c;
+      });
+    } catch {
+      // Fallback: strip non-ASCII
+      cleaned = cleaned.map((c) => ({
+        ...c,
+        value: c.value?.replace(/[^\x00-\x7F]/g, "") || c.value,
+        package: c.package?.replace(/[^\x00-\x7F]/g, "") || c.package,
+        designator: c.designator.replace(/[^\x00-\x7F]/g, ""),
+      }));
+    }
+
+    return cleaned;
+  }
+
   // ---- step 4: export (client-side YY1 CSV generation) ----
-  function handleExport() {
+  async function handleExport() {
     // YY1 template header (11 rows)
     const header = [
-      "NEODEN,YY1,P&P FILE,,,,,,,,,,",
-      ",,,,,,,,,,,,",
-      "PanelizedPCB,UnitLength,0,UnitWidth,0,Rows,1,Columns,1,,,,",
-      ",,,,,,,,,,,,",
-      "Fiducial,1-X,0,1-Y,0,OverallOffsetX,0,OverallOffsetY,0,,,,",
-      ",,,,,,,,,,,,",
-      "NozzleChange,OFF,BeforeComponent,2,Head1,Drop,Station1,PickUp,Station3,,,,",
-      "NozzleChange,OFF,BeforeComponent,3,Head1,Drop,Station3,PickUp,Station1,,,,",
-      "NozzleChange,OFF,BeforeComponent,1,Head1,Drop,Station1,PickUp,Station1,,,,",
-      "NozzleChange,OFF,BeforeComponent,1,Head1,Drop,Station1,PickUp,Station1,,,,",
-      ",,,,,,,,,,,,",
-      "Designator,Comment,Footprint,Mid X(mm),Mid Y(mm),Rotation,Head,FeederNo,Mount Speed(%),Pick Height(mm),Place Height(mm),Mode,Skip",
+      "NEODEN,YY1,P&P FILE,,,,,,,,,,,",
+      ",,,,,,,,,,,,,",
+      "PanelizedPCB,UnitLength,0,UnitWidth,0,Rows,1,Columns,1,",
+      ",,,,,,,,,,,,,",
+      "Fiducial,1-X,0,1-Y,0,OverallOffsetX,0,OverallOffsetY,0,",
+      ",,,,,,,,,,,,,",
+      "NozzleChange,OFF,BeforeComponent,2,Head1,Drop,Station1,PickUp,Station3,",
+      "NozzleChange,OFF,BeforeComponent,3,Head1,Drop,Station3,PickUp,Station1,",
+      "NozzleChange,OFF,BeforeComponent,1,Head1,Drop,Station1,PickUp,Station1,",
+      "NozzleChange,OFF,BeforeComponent,1,Head1,Drop,Station1,PickUp,Station1,",
+      ",,,,,,,,,,,,,",
+      "Designator,Comment,Footprint,Mid X(mm),Mid Y(mm) ,Rotation,Head ,FeederNo,Mount Speed(%),Pick Height(mm),Place Height(mm),Mode,Skip",
     ];
 
-    const rows = filteredComponents.map((c) => {
+    setLoading(true);
+    const asciiComponents = await ensureAsciiComponents();
+    const exportComponents = asciiComponents.filter((c) => {
+      if (sideFilter === "all") return true;
+      return c.side.toLowerCase() === sideFilter;
+    });
+    setLoading(false);
+
+    const rows = exportComponents.map((c) => {
       const s = getSettings(c.designator);
       return [
         c.designator,
         c.value ?? "",
         c.package ?? "",
-        c.x.toFixed(4),
-        c.y.toFixed(4),
+        c.x.toFixed(2),
+        c.y.toFixed(2),
         c.rotation.toFixed(2),
         s.head,
         s.feederNo,
         s.mountSpeed,
-        0, // Pick Height
-        0, // Place Height
+        "0.0", // Pick Height
+        "0.0", // Place Height
         1, // Mode
         s.skip ? 1 : 0,
       ].join(",");
     });
 
-    const csv = [...header, ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const csv = [...header, ...rows].join("\r\n") + "\r\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=us-ascii;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -394,8 +478,76 @@ export default function PnPConverter() {
   }
 
   function addCalibrationPoint() {
-    if (calibrationPoints.length >= 4) return;
     setCalibrationPoints((prev) => [...prev, emptyPoint()]);
+  }
+
+  function handleCalibrationCsvUpload(file: File) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) return;
+
+      const lines = text.trim().split("\n");
+      if (lines.length < 2) {
+        toast.error("CSV must have a header row and at least one data row");
+        return;
+      }
+
+      // Parse header - detect delimiter
+      const delimiter = lines[0].includes("\t") ? "\t" : lines[0].includes(";") ? ";" : ",";
+      const headers = lines[0].split(delimiter).map((h) => h.trim().toLowerCase().replace(/['"]/g, ""));
+
+      // Find column indices (flexible matching)
+      const desigIdx = headers.findIndex((h) => /^(designator|ref|part|component)/.test(h));
+      const xIdx = headers.findIndex((h) => /^(x|mid.?x|pos.?x|center.?x|machine.?x)/.test(h));
+      const yIdx = headers.findIndex((h) => /^(y|mid.?y|pos.?y|center.?y|machine.?y)/.test(h));
+      const rotIdx = headers.findIndex((h) => /^(rot|angle|machine.?rot)/.test(h));
+
+      if (desigIdx === -1 || xIdx === -1 || yIdx === -1) {
+        toast.error("CSV must have Designator, X, and Y columns");
+        return;
+      }
+
+      // Parse machine coordinate rows
+      const machineCoords: Record<string, { x: number; y: number; rotation: number }> = {};
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(delimiter).map((c) => c.trim().replace(/['"]/g, ""));
+        const desig = cols[desigIdx];
+        const x = parseFloat(cols[xIdx]);
+        const y = parseFloat(cols[yIdx]);
+        const rot = rotIdx !== -1 ? parseFloat(cols[rotIdx]) : 0;
+        if (desig && !isNaN(x) && !isNaN(y)) {
+          machineCoords[desig] = { x, y, rotation: isNaN(rot) ? 0 : rot };
+        }
+      }
+
+      // Match against our PnP components
+      const matched: CalibrationPoint[] = [];
+      for (const comp of components) {
+        const mc = machineCoords[comp.designator];
+        if (mc) {
+          matched.push({
+            designator: comp.designator,
+            fileX: comp.x.toFixed(4),
+            fileY: comp.y.toFixed(4),
+            fileRotation: comp.rotation.toFixed(2),
+            machineX: mc.x.toFixed(4),
+            machineY: mc.y.toFixed(4),
+            machineRotation: mc.rotation.toFixed(2),
+          });
+        }
+      }
+
+      if (matched.length < 2) {
+        toast.error(`Only ${matched.length} designator(s) matched. Need at least 2.`);
+        return;
+      }
+
+      // Store all matched points with selection state - select all by default
+      setCsvCalibrationPoints(matched.map((m) => ({ ...m, selected: true })));
+      toast.success(`Found ${matched.length} matching points from CSV. Select which to use.`);
+    };
+    reader.readAsText(file);
   }
 
   function removeCalibrationPoint(index: number) {
@@ -479,12 +631,12 @@ export default function PnPConverter() {
     {
       key: "x",
       header: "Mid X(mm)",
-      render: (c) => <span className="font-mono text-xs">{c.x.toFixed(4)}</span>,
+      render: (c) => <span className="font-mono text-xs">{c.x.toFixed(2)}</span>,
     },
     {
       key: "y",
       header: "Mid Y(mm)",
-      render: (c) => <span className="font-mono text-xs">{c.y.toFixed(4)}</span>,
+      render: (c) => <span className="font-mono text-xs">{c.y.toFixed(2)}</span>,
     },
     {
       key: "rotation",
@@ -779,11 +931,174 @@ export default function PnPConverter() {
           </CardHeader>
           <CardContent className="space-y-6">
             <p className="text-sm text-muted-foreground">
-              Select 2-4 reference components from your design. The file coordinates will be
-              filled automatically — then enter the actual machine coordinates and rotation for
-              each point.
+              Add reference points manually, or upload a CSV with machine coordinates to
+              auto-fill all points. More points = better calibration accuracy.
             </p>
 
+            {/* CSV upload for machine coordinates */}
+            <div className="rounded-lg border border-dashed border-border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex-1">
+                <p className="text-sm font-medium">Import machine coordinates from CSV</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Upload a CSV with columns: Designator, X, Y (and optionally Rotation).
+                  The system will match designators and auto-fill calibration points.
+                </p>
+              </div>
+              <label className="shrink-0">
+                <input
+                  type="file"
+                  accept=".csv,.txt,.tsv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleCalibrationCsvUpload(f);
+                    e.target.value = "";
+                  }}
+                />
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium cursor-pointer hover:bg-accent transition-colors">
+                  <ArrowDownTrayIcon className="h-4 w-4" />
+                  Upload CSV
+                </span>
+              </label>
+            </div>
+
+            {/* CSV point picker */}
+            {csvCalibrationPoints.length > 0 && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {csvCalibrationPoints.filter((p) => p.selected).length} of {csvCalibrationPoints.length} points selected
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Select which points to use for calibration. More points = higher accuracy.
+                      Use "Apply Direct" if you have coordinates for all components.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCsvCalibrationPoints((prev) => prev.map((p) => ({ ...p, selected: true })))}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCsvCalibrationPoints((prev) => prev.map((p) => ({ ...p, selected: false })))}
+                    >
+                      Deselect All
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCsvCalibrationPoints([])}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded border border-border">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-card">
+                      <tr className="text-muted-foreground border-b">
+                        <th className="text-left py-1.5 px-2 w-8"></th>
+                        <th className="text-left py-1.5 px-2">Designator</th>
+                        <th className="text-left py-1.5 px-2">File X</th>
+                        <th className="text-left py-1.5 px-2">File Y</th>
+                        <th className="text-left py-1.5 px-2">Machine X</th>
+                        <th className="text-left py-1.5 px-2">Machine Y</th>
+                        <th className="text-left py-1.5 px-2">Rot</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-mono">
+                      {csvCalibrationPoints.map((pt, idx) => (
+                        <tr
+                          key={idx}
+                          className={`border-t border-border/30 cursor-pointer hover:bg-accent/50 transition-colors ${pt.selected ? "" : "opacity-40"}`}
+                          onClick={() =>
+                            setCsvCalibrationPoints((prev) =>
+                              prev.map((p, i) => (i === idx ? { ...p, selected: !p.selected } : p))
+                            )
+                          }
+                        >
+                          <td className="py-1 px-2">
+                            <input
+                              type="checkbox"
+                              checked={pt.selected}
+                              readOnly
+                              className="rounded border-input"
+                            />
+                          </td>
+                          <td className="py-1 px-2 font-semibold">{pt.designator}</td>
+                          <td className="py-1 px-2">{pt.fileX}</td>
+                          <td className="py-1 px-2">{pt.fileY}</td>
+                          <td className="py-1 px-2">{pt.machineX}</td>
+                          <td className="py-1 px-2">{pt.machineY}</td>
+                          <td className="py-1 px-2">{pt.machineRotation}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        const selected = csvCalibrationPoints.filter((p) => p.selected);
+                        if (selected.length === 0) {
+                          toast.error("Select at least some points");
+                          return;
+                        }
+                        // Directly replace coordinates for selected components
+                        const coordMap = new Map(selected.map((m) => [
+                          m.designator,
+                          { x: parseFloat(m.machineX), y: parseFloat(m.machineY), rotation: parseFloat(m.machineRotation) },
+                        ]));
+                        const applied = components.map((c) => {
+                          const mc = coordMap.get(c.designator);
+                          return mc ? { ...c, x: mc.x, y: mc.y, rotation: mc.rotation } : c;
+                        });
+                        setComponents(applied);
+                        setCalibrated(true);
+                        setTransformInfo(null);
+                        const notCovered = components.length - selected.length;
+                        toast.success(
+                          `Machine coordinates applied for ${selected.length} components` +
+                          (notCovered > 0 ? `. ${notCovered} components without machine coords keep design positions.` : "")
+                        );
+                        setStep(4);
+                      }}
+                    >
+                      Apply Machine Coordinates ({csvCalibrationPoints.filter((p) => p.selected).length} selected)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={csvCalibrationPoints.filter((p) => p.selected).length < 2}
+                      onClick={() => {
+                        const selected = csvCalibrationPoints.filter((p) => p.selected);
+                        setCalibrationPoints(selected);
+                        setCsvCalibrationPoints([]);
+                        toast.success(`${selected.length} reference points set. Click "Apply Calibration" below.`);
+                      }}
+                    >
+                      Use as Reference Points for Transform
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Apply Machine Coordinates</strong>: directly uses the X/Y/Rotation from the CSV for each component (recommended when CSV has all components).
+                    <br />
+                    <strong>Use as Reference Points</strong>: computes a mathematical transform from the selected points to map all components (use when CSV has only a few reference points).
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Individual point editors (manual entry) */}
+            {csvCalibrationPoints.length === 0 && (
             <div className="space-y-6">
               {calibrationPoints.map((pt, idx) => (
                 <div key={idx} className="rounded-lg border p-4 space-y-4">
@@ -895,13 +1210,12 @@ export default function PnPConverter() {
                 </div>
               ))}
             </div>
-
-            {calibrationPoints.length < 4 && (
-              <Button variant="outline" size="sm" onClick={addCalibrationPoint}>
-                <PlusIcon className="h-4 w-4 mr-1" />
-                Add Reference Point
-              </Button>
             )}
+
+            <Button variant="outline" size="sm" onClick={addCalibrationPoint}>
+              <PlusIcon className="h-4 w-4 mr-1" />
+              Add Reference Point
+            </Button>
 
             {transformInfo && (
               <>
@@ -1069,14 +1383,18 @@ export default function PnPConverter() {
                   </div>
                   {feeders.length > 0 && (
                     <>
-                      <Badge variant="outline">{feeders.length} feeders loaded</Badge>
+                      <Badge color="green">{feeders.length} feeders loaded</Badge>
                       <Button
-                        variant="outline"
                         size="sm"
                         className="h-8"
-                        onClick={() => {
-                          let matched = 0;
+                        disabled={loading}
+                        onClick={async () => {
+                          if (!selectedMachineId) return;
+
+                          // Phase 1: exact match
+                          let exactMatched = 0;
                           const updated = { ...componentSettings };
+                          const unmatched: typeof components = [];
                           components.forEach((c) => {
                             const feeder = feeders.find(
                               (f) =>
@@ -1090,14 +1408,72 @@ export default function PnPConverter() {
                                 head: feeder.head,
                                 mountSpeed: feeder.mount_speed,
                               };
-                              matched++;
+                              exactMatched++;
+                            } else {
+                              unmatched.push(c);
                             }
                           });
                           setComponentSettings(updated);
-                          toast.success(`Auto-assigned ${matched}/${components.length} components to feeders`);
+
+                          // Phase 2: AI match for unmatched
+                          if (unmatched.length > 0) {
+                            setLoading(true);
+                            try {
+                              const { data } = await apiClient.post<{
+                                matches: Array<{
+                                  designator: string;
+                                  feeder_slot: number | null;
+                                  head: number;
+                                  mount_speed: number;
+                                  confidence: string;
+                                  reason: string | null;
+                                }>;
+                                matched_count: number;
+                                total_count: number;
+                              }>("/pnp/ai-feeder-match", {
+                                machine_id: selectedMachineId,
+                                components: unmatched.map((c) => ({
+                                  designator: c.designator,
+                                  value: c.value,
+                                  package: c.package,
+                                })),
+                              });
+                              const aiUpdated = { ...updated };
+                              for (const m of data.matches) {
+                                if (m.feeder_slot != null) {
+                                  aiUpdated[m.designator] = {
+                                    ...getSettings(m.designator),
+                                    feederNo: m.feeder_slot,
+                                    head: m.head,
+                                    mountSpeed: m.mount_speed,
+                                  };
+                                }
+                              }
+                              setComponentSettings(aiUpdated);
+                              toast.success(
+                                `Assigned feeders: ${exactMatched} exact + ${data.matched_count} AI matched out of ${components.length}`
+                              );
+                            } catch {
+                              toast.success(`Exact match: ${exactMatched}/${components.length}. AI matching failed for remaining.`);
+                            } finally {
+                              setLoading(false);
+                            }
+                          } else {
+                            toast.success(`All ${exactMatched}/${components.length} components matched exactly`);
+                          }
                         }}
                       >
-                        Auto-Assign Feeders
+                        {loading ? (
+                          <>
+                            <ArrowPathIcon className="h-3.5 w-3.5 mr-1 animate-spin" />
+                            Matching...
+                          </>
+                        ) : (
+                          <>
+                            <SparklesIcon className="h-3.5 w-3.5 mr-1" />
+                            AI Match Feeders
+                          </>
+                        )}
                       </Button>
                     </>
                   )}
