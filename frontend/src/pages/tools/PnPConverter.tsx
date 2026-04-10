@@ -101,6 +101,182 @@ function StepIndicator({ current }: { current: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Board map visualization with rotation, mirror & calibration highlighting
+// ---------------------------------------------------------------------------
+// Side colors: top = blue, bottom = green
+const SIDE_COLOR_TOP = "hsl(210 100% 60%)";
+const SIDE_COLOR_BOTTOM = "hsl(150 80% 45%)";
+const CALIBRATION_COLOR = "hsl(30 100% 50%)";
+
+function sideColor(side: string) {
+  return side.toLowerCase() === "bottom" ? SIDE_COLOR_BOTTOM : SIDE_COLOR_TOP;
+}
+
+function BoardMap({
+  components,
+  highlightedDesignators,
+  calibrationDesignators,
+  onClickComponent,
+  rotation = 0,
+  mirrorX = false,
+  mirrorY = false,
+  layerFilter = "all",
+  width = 400,
+  height = 300,
+}: {
+  components: PnPComponent[];
+  highlightedDesignators: Set<string>;
+  calibrationDesignators?: Set<string>;
+  onClickComponent?: (designator: string) => void;
+  rotation?: number; // 0, 90, 180, 270
+  mirrorX?: boolean;
+  mirrorY?: boolean;
+  layerFilter?: "all" | "top" | "bottom";
+  width?: number;
+  height?: number;
+}) {
+  if (components.length === 0) return null;
+
+  // Filter by layer
+  const visible = layerFilter === "all"
+    ? components
+    : components.filter((c) => c.side.toLowerCase() === layerFilter);
+
+  // Apply rotation + mirror to coordinates for display
+  const rad = (rotation * Math.PI) / 180;
+  const cosR = Math.cos(rad);
+  const sinR = Math.sin(rad);
+
+  const transformed = visible.map((c) => {
+    let tx = c.x * cosR - c.y * sinR;
+    let ty = c.x * sinR + c.y * cosR;
+    if (mirrorX) tx = -tx;
+    if (mirrorY) ty = -ty;
+    return { ...c, tx, ty };
+  });
+
+  if (transformed.length === 0) return null;
+
+  const xs = transformed.map((c) => c.tx);
+  const ys = transformed.map((c) => c.ty);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+
+  const pad = 30;
+  const innerW = width - pad * 2;
+  const innerH = height - pad * 2;
+  const scale = Math.min(innerW / rangeX, innerH / rangeY);
+
+  function toSvg(tx: number, ty: number) {
+    return {
+      sx: pad + (tx - minX) * scale,
+      sy: pad + (maxY - ty) * scale, // flip Y for screen coords
+    };
+  }
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      className="bg-card border border-border rounded-lg"
+      viewBox={`0 0 ${width} ${height}`}
+    >
+      {/* Board outline */}
+      <rect
+        x={pad - 5}
+        y={pad - 5}
+        width={rangeX * scale + 10}
+        height={rangeY * scale + 10}
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity={0.1}
+        strokeWidth={1}
+        rx={3}
+      />
+      {/* Origin marker */}
+      {(() => {
+        const { sx: ox, sy: oy } = toSvg(minX, Math.min(...ys));
+        return (
+          <g>
+            <line x1={ox} y1={oy} x2={ox + 18} y2={oy} stroke="hsl(var(--destructive))" strokeWidth={1.5} opacity={0.5} />
+            <line x1={ox} y1={oy} x2={ox} y2={oy - 18} stroke="hsl(0 130 50)" strokeWidth={1.5} opacity={0.5} />
+            <text x={ox + 20} y={oy} fill="hsl(var(--destructive))" fontSize={8} opacity={0.6}>X</text>
+            <text x={ox + 2} y={oy - 20} fill="hsl(0 130 50)" fontSize={8} opacity={0.6}>Y</text>
+          </g>
+        );
+      })()}
+      {/* Legend */}
+      {layerFilter === "all" && (
+        <g>
+          <circle cx={width - 70} cy={12} r={4} fill={SIDE_COLOR_TOP} />
+          <text x={width - 63} y={15} fill={SIDE_COLOR_TOP} fontSize={9}>Top</text>
+          <circle cx={width - 35} cy={12} r={4} fill={SIDE_COLOR_BOTTOM} />
+          <text x={width - 28} y={15} fill={SIDE_COLOR_BOTTOM} fontSize={9}>Bot</text>
+        </g>
+      )}
+      {/* All components as dots */}
+      {transformed.map((c) => {
+        const { sx, sy } = toSvg(c.tx, c.ty);
+        const isCalibration = calibrationDesignators?.has(c.designator);
+        const isHighlighted = highlightedDesignators.has(c.designator);
+        const baseSideColor = sideColor(c.side);
+        const dotColor = isCalibration
+          ? CALIBRATION_COLOR
+          : isHighlighted
+          ? baseSideColor
+          : baseSideColor;
+        const r = isCalibration ? 7 : isHighlighted ? 6 : 3;
+        return (
+          <g
+            key={c.designator}
+            onClick={() => onClickComponent?.(c.designator)}
+            className={onClickComponent ? "cursor-pointer" : ""}
+          >
+            {isCalibration && (
+              <circle
+                cx={sx}
+                cy={sy}
+                r={10}
+                fill="none"
+                stroke={CALIBRATION_COLOR}
+                strokeWidth={2}
+                strokeDasharray="3 2"
+                opacity={0.6}
+              />
+            )}
+            <circle
+              cx={sx}
+              cy={sy}
+              r={r}
+              fill={dotColor}
+              fillOpacity={isHighlighted || isCalibration ? 1 : 0.35}
+              stroke={isCalibration ? CALIBRATION_COLOR : isHighlighted ? baseSideColor : "none"}
+              strokeWidth={isHighlighted || isCalibration ? 2 : 0}
+            />
+            {(isHighlighted || isCalibration) && (
+              <text
+                x={sx}
+                y={sy - (isCalibration ? 14 : 10)}
+                textAnchor="middle"
+                fill={isCalibration ? CALIBRATION_COLOR : baseSideColor}
+                fontSize={isCalibration ? 11 : 10}
+                fontWeight={600}
+              >
+                {c.designator}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Calibration point type
 // ---------------------------------------------------------------------------
 interface CalibrationPoint {
@@ -146,6 +322,12 @@ export default function PnPConverter() {
   const [showSavedSessions, setShowSavedSessions] = useState(false);
   // CSV calibration: all matched points from uploaded CSV, with selection
   const [csvCalibrationPoints, setCsvCalibrationPoints] = useState<(CalibrationPoint & { selected: boolean })[]>([]);
+
+  // Board orientation for calibration visualization
+  const [boardRotation, setBoardRotation] = useState<number>(0); // 0, 90, 180, 270
+  const [boardMirrorX, setBoardMirrorX] = useState(false);
+  const [boardMirrorY, setBoardMirrorY] = useState(false);
+  const [boardLayerFilter, setBoardLayerFilter] = useState<"all" | "top" | "bottom">("all");
 
   // Feeder configuration
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null);
@@ -479,6 +661,65 @@ export default function PnPConverter() {
 
   function addCalibrationPoint() {
     setCalibrationPoints((prev) => [...prev, emptyPoint()]);
+  }
+
+  function quickCalibrateCorners() {
+    // Auto-pick 4 corner components: top-left, top-right, bottom-left, bottom-right
+    if (components.length < 4) {
+      toast.error("Need at least 4 components for quick calibration");
+      return;
+    }
+
+    const xs = components.map((c) => c.x);
+    const ys = components.map((c) => c.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+
+    // Score each component by how close it is to each corner
+    function cornerDist(c: PnPComponent, cornerX: number, cornerY: number) {
+      return Math.sqrt((c.x - cornerX) ** 2 + (c.y - cornerY) ** 2);
+    }
+
+    const corners = [
+      { label: "Top-Left", x: minX, y: maxY },
+      { label: "Top-Right", x: maxX, y: maxY },
+      { label: "Bottom-Left", x: minX, y: minY },
+      { label: "Bottom-Right", x: maxX, y: minY },
+    ];
+
+    const used = new Set<string>();
+    const points: CalibrationPoint[] = [];
+
+    for (const corner of corners) {
+      // Find closest component to this corner that hasn't been used
+      const sorted = [...components]
+        .filter((c) => !used.has(c.designator))
+        .sort((a, b) => cornerDist(a, corner.x, corner.y) - cornerDist(b, corner.x, corner.y));
+
+      if (sorted.length > 0) {
+        const comp = sorted[0];
+        used.add(comp.designator);
+        points.push({
+          designator: comp.designator,
+          fileX: comp.x.toFixed(4),
+          fileY: comp.y.toFixed(4),
+          fileRotation: comp.rotation.toFixed(2),
+          machineX: "",
+          machineY: "",
+          machineRotation: "",
+        });
+      }
+    }
+
+    setCalibrationPoints(points);
+    setCsvCalibrationPoints([]);
+    toast.success(
+      `Selected 4 corner components: ${points.map((p) => p.designator).join(", ")}. Enter machine coordinates for each.`
+    );
   }
 
   function handleCalibrationCsvUpload(file: File) {
@@ -931,20 +1172,22 @@ export default function PnPConverter() {
           </CardHeader>
           <CardContent className="space-y-6">
             <p className="text-sm text-muted-foreground">
-              Add reference points manually, or upload a CSV with machine coordinates to
-              auto-fill all points. More points = better calibration accuracy.
+              Pick reference points to map design coordinates to machine coordinates.
             </p>
 
-            {/* CSV upload for machine coordinates */}
-            <div className="rounded-lg border border-dashed border-border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="flex-1">
-                <p className="text-sm font-medium">Import machine coordinates from CSV</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Upload a CSV with columns: Designator, X, Y (and optionally Rotation).
-                  The system will match designators and auto-fill calibration points.
+            {/* Quick calibrate options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div
+                className="rounded-lg border border-border p-4 cursor-pointer hover:border-primary/50 hover:bg-accent/30 transition-colors"
+                onClick={quickCalibrateCorners}
+              >
+                <p className="text-sm font-medium">Quick Calibrate (4 corners)</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Auto-picks 4 corner components. Jog your machine to each one and enter the X/Y coordinates.
+                  Best for fast setup.
                 </p>
               </div>
-              <label className="shrink-0">
+              <label className="rounded-lg border border-dashed border-border p-4 cursor-pointer hover:border-primary/50 hover:bg-accent/30 transition-colors">
                 <input
                   type="file"
                   accept=".csv,.txt,.tsv"
@@ -955,12 +1198,118 @@ export default function PnPConverter() {
                     e.target.value = "";
                   }}
                 />
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium cursor-pointer hover:bg-accent transition-colors">
-                  <ArrowDownTrayIcon className="h-4 w-4" />
-                  Upload CSV
-                </span>
+                <p className="text-sm font-medium">Import from CSV</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Upload a CSV with machine coordinates (Designator, X, Y, Rotation).
+                  Best when you already have a calibrated file.
+                </p>
               </label>
             </div>
+
+            {/* Board map showing component positions and selected calibration points */}
+            {components.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Component positions — highlighted points are selected for calibration.
+                    {csvCalibrationPoints.length === 0 && " Click a dot to toggle it as a reference point."}
+                  </p>
+                </div>
+
+                {/* Board orientation & layer controls */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground mr-1">Orientation:</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setBoardRotation((r) => (r + 90) % 360)}
+                  >
+                    <ArrowPathIcon className="h-3 w-3 mr-1" />
+                    Rotate {boardRotation}°
+                  </Button>
+                  <Button
+                    variant={boardMirrorX ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setBoardMirrorX((m) => !m)}
+                  >
+                    Mirror X
+                  </Button>
+                  <Button
+                    variant={boardMirrorY ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setBoardMirrorY((m) => !m)}
+                  >
+                    Mirror Y
+                  </Button>
+                  {(boardRotation !== 0 || boardMirrorX || boardMirrorY) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-muted-foreground"
+                      onClick={() => { setBoardRotation(0); setBoardMirrorX(false); setBoardMirrorY(false); }}
+                    >
+                      Reset
+                    </Button>
+                  )}
+
+                  <Separator orientation="vertical" className="h-5 mx-1" />
+
+                  <span className="text-xs text-muted-foreground mr-1">Layer:</span>
+                  {(["all", "top", "bottom"] as const).map((layer) => (
+                    <Button
+                      key={layer}
+                      variant={boardLayerFilter === layer ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 px-2 text-xs capitalize"
+                      onClick={() => setBoardLayerFilter(layer)}
+                    >
+                      {layer === "all" ? "Both" : layer}
+                    </Button>
+                  ))}
+                </div>
+
+                <BoardMap
+                  components={components}
+                  highlightedDesignators={new Set(calibrationPoints.map((p) => p.designator).filter(Boolean))}
+                  calibrationDesignators={new Set(calibrationPoints.filter((p) => p.designator && p.machineX && p.machineY).map((p) => p.designator))}
+                  rotation={boardRotation}
+                  mirrorX={boardMirrorX}
+                  mirrorY={boardMirrorY}
+                  layerFilter={boardLayerFilter}
+                  onClickComponent={csvCalibrationPoints.length === 0 ? (designator) => {
+                    const exists = calibrationPoints.find((p) => p.designator === designator);
+                    if (exists) {
+                      // Remove if already selected (keep min 2)
+                      if (calibrationPoints.length > 2) {
+                        setCalibrationPoints((prev) => prev.filter((p) => p.designator !== designator));
+                      }
+                    } else {
+                      // Add this component as a calibration point
+                      const comp = components.find((c) => c.designator === designator);
+                      if (comp) {
+                        setCalibrationPoints((prev) => [
+                          ...prev.filter((p) => p.designator), // remove empty points
+                          {
+                            designator: comp.designator,
+                            fileX: comp.x.toFixed(4),
+                            fileY: comp.y.toFixed(4),
+                            fileRotation: comp.rotation.toFixed(2),
+                            machineX: "",
+                            machineY: "",
+                            machineRotation: "",
+                          },
+                        ]);
+                      }
+                    }
+                  } : undefined}
+                  width={500}
+                  height={350}
+                />
+              </div>
+            )}
 
             {/* CSV point picker */}
             {csvCalibrationPoints.length > 0 && (
