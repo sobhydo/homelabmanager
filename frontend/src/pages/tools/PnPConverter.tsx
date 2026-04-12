@@ -10,6 +10,7 @@ import {
   SparklesIcon,
   BookmarkIcon,
   FolderOpenIcon,
+  PrinterIcon,
 } from "@heroicons/react/24/outline";
 import apiClient from "../../api/client";
 import FileUpload from "../../components/ui/FileUpload";
@@ -563,6 +564,105 @@ export default function PnPConverter() {
     }
 
     return cleaned;
+  }
+
+  // ---- print feeder configuration ----
+  function handlePrintFeederConfig() {
+    const active = filteredComponents.filter((c) => !getSettings(c.designator).skip);
+
+    // Group by feeder number
+    const feederMap = new Map<number, { feederNo: number; feeder?: Feeder; components: { designator: string; value: string | null; package: string | null; x: number; y: number; rotation: number; head: number; mountSpeed: number }[] }>();
+    for (const c of active) {
+      const s = getSettings(c.designator);
+      if (!feederMap.has(s.feederNo)) {
+        feederMap.set(s.feederNo, {
+          feederNo: s.feederNo,
+          feeder: feeders.find((f) => f.slot_number === s.feederNo),
+          components: [],
+        });
+      }
+      feederMap.get(s.feederNo)!.components.push({
+        designator: c.designator,
+        value: c.value,
+        package: c.package,
+        x: c.x,
+        y: c.y,
+        rotation: c.rotation,
+        head: s.head,
+        mountSpeed: s.mountSpeed,
+      });
+    }
+
+    const sorted = [...feederMap.values()].sort((a, b) => a.feederNo - b.feederNo);
+    const machineName = pnpMachines.find((m) => m.id === selectedMachineId)?.name || "—";
+
+    const html = `<!DOCTYPE html>
+<html><head><title>Feeder Configuration</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; color: #111; padding: 16px; }
+  h1 { font-size: 16px; margin-bottom: 2px; }
+  .meta { color: #666; font-size: 10px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th, td { border: 1px solid #ccc; padding: 3px 6px; text-align: left; }
+  th { background: #f5f5f5; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+  .feeder-header { background: #e8e8e8; font-weight: 600; }
+  .feeder-header td { padding: 5px 6px; }
+  .mono { font-family: "SF Mono", "Consolas", monospace; font-size: 10px; }
+  .summary { margin-bottom: 12px; }
+  .summary span { display: inline-block; margin-right: 16px; }
+  @media print { body { padding: 8px; } }
+</style>
+</head><body>
+<h1>Feeder Configuration</h1>
+<div class="meta">
+  File: ${file?.name || "—"} &nbsp;|&nbsp; Machine: ${machineName} &nbsp;|&nbsp; ${format(new Date(), "yyyy-MM-dd HH:mm")}
+</div>
+<div class="summary">
+  <span><strong>${active.length}</strong> components</span>
+  <span><strong>${sorted.length}</strong> feeders</span>
+  <span>Side: ${sideFilter}</span>
+  <span>Calibrated: ${calibrated ? "Yes" : "No"}</span>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Feeder #</th>
+      <th>Value / Package</th>
+      <th>Designator</th>
+      <th>X (mm)</th>
+      <th>Y (mm)</th>
+      <th>Rot</th>
+      <th>Head</th>
+      <th>Speed %</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${sorted.map((g) => {
+      const label = g.feeder
+        ? `${g.feeder.component_value || ""} ${g.feeder.component_package || ""}`.trim() || `Slot ${g.feederNo}`
+        : `Slot ${g.feederNo}`;
+      return g.components.map((c, i) => `
+    <tr${i === 0 ? ' class="feeder-header"' : ""}>
+      ${i === 0 ? `<td rowspan="${g.components.length}">${g.feederNo}</td><td rowspan="${g.components.length}">${label}</td>` : ""}
+      <td>${c.designator}</td>
+      <td class="mono">${c.x.toFixed(2)}</td>
+      <td class="mono">${c.y.toFixed(2)}</td>
+      <td class="mono">${c.rotation.toFixed(1)}</td>
+      <td>${c.head}</td>
+      <td>${c.mountSpeed}</td>
+    </tr>`).join("");
+    }).join("")}
+  </tbody>
+</table>
+</body></html>`;
+
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      w.onload = () => w.print();
+    }
   }
 
   // ---- step 4: export (client-side YY1 CSV generation) ----
@@ -1938,6 +2038,10 @@ export default function PnPConverter() {
               >
                 <BookmarkIcon className="h-4 w-4 mr-1.5" />
                 {saveMutation.isPending ? "Saving..." : "Save Session"}
+              </Button>
+              <Button variant="outline" onClick={handlePrintFeederConfig}>
+                <PrinterIcon className="h-4 w-4 mr-1.5" />
+                Print Feeder Config
               </Button>
               <Button size="lg" onClick={handleExport}>
                 <ArrowDownTrayIcon className="h-5 w-5 mr-2" />

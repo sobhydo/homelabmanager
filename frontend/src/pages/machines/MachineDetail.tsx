@@ -9,6 +9,7 @@ import {
   PlusIcon,
   CheckIcon,
   XMarkIcon,
+  PrinterIcon,
 } from "@heroicons/react/24/outline";
 import { useMachine, useDeleteMachine, useMaintenanceTasks } from "../../api/machines";
 import {
@@ -88,6 +89,75 @@ export default function MachineDetail() {
       // handled
     }
   };
+
+  function handlePrintFeederConfig() {
+    if (feeders.length === 0) {
+      toast.error("No feeders to print");
+      return;
+    }
+
+    const sorted = [...feeders].sort((a, b) => a.slot_number - b.slot_number);
+    const html = `<!DOCTYPE html>
+<html><head><title>Feeder Configuration — ${machine?.name || "Machine"}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; color: #111; padding: 16px; }
+  h1 { font-size: 16px; margin-bottom: 2px; }
+  .meta { color: #666; font-size: 10px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+  th { background: #f5f5f5; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+  .mono { font-family: "SF Mono", "Consolas", monospace; font-size: 10px; }
+  .empty { color: #999; }
+  .summary { margin-bottom: 12px; font-size: 11px; }
+  @media print { body { padding: 8px; } }
+</style>
+</head><body>
+<h1>Feeder Configuration</h1>
+<div class="meta">
+  Machine: ${machine?.name || "—"}
+  ${machine?.manufacturer ? ` &nbsp;|&nbsp; ${machine.manufacturer} ${machine.model || ""}` : ""}
+  &nbsp;|&nbsp; ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+</div>
+<div class="summary"><strong>${sorted.length}</strong> feeders configured</div>
+<table>
+  <thead>
+    <tr>
+      <th>Slot</th>
+      <th>Value</th>
+      <th>Package</th>
+      <th>Part #</th>
+      <th>Supplier Part #</th>
+      <th>Nozzle</th>
+      <th>Speed</th>
+      <th>Head</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${sorted.map((f) => `
+    <tr>
+      <td class="mono" style="font-weight:600">${f.slot_number}</td>
+      <td>${f.component_value || '<span class="empty">—</span>'}</td>
+      <td>${f.component_package || '<span class="empty">—</span>'}</td>
+      <td class="mono">${f.part_number || '<span class="empty">—</span>'}</td>
+      <td class="mono">${f.supplier_part_number || '<span class="empty">—</span>'}</td>
+      <td>${f.nozzle}</td>
+      <td>${f.mount_speed}%</td>
+      <td>${f.head}</td>
+      <td>${f.notes || '<span class="empty">—</span>'}</td>
+    </tr>`).join("")}
+  </tbody>
+</table>
+</body></html>`;
+
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      w.onload = () => w.print();
+    }
+  }
 
   if (isLoading) {
     return (
@@ -268,10 +338,18 @@ export default function MachineDetail() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Feeder Configuration</CardTitle>
-            <Button size="sm" onClick={() => setShowAddFeeder(!showAddFeeder)}>
-              <PlusIcon className="h-4 w-4 mr-1" />
-              Add Feeder
-            </Button>
+            <div className="flex gap-2">
+              {feeders.length > 0 && (
+                <Button variant="outline" size="sm" onClick={handlePrintFeederConfig}>
+                  <PrinterIcon className="h-4 w-4 mr-1" />
+                  Print
+                </Button>
+              )}
+              <Button size="sm" onClick={() => setShowAddFeeder(!showAddFeeder)}>
+                <PlusIcon className="h-4 w-4 mr-1" />
+                Add Feeder
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {/* Add feeder form */}
