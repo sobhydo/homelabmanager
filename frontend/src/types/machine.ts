@@ -13,6 +13,10 @@ export interface Machine {
   purchase_price?: number;
   specs?: Record<string, unknown>;
   notes?: string;
+  pcb_origin_x?: number | null;
+  pcb_origin_y?: number | null;
+  nozzle_height_datum?: number | null;
+  default_mount_speed?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +35,10 @@ export interface MachineCreate {
   purchase_price?: number;
   specs?: Record<string, unknown>;
   notes?: string;
+  pcb_origin_x?: number | null;
+  pcb_origin_y?: number | null;
+  nozzle_height_datum?: number | null;
+  default_mount_speed?: number | null;
 }
 
 export type MachineUpdate = Partial<MachineCreate>;

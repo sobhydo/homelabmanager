@@ -21,6 +21,11 @@ class Machine(Base):
     purchase_date = Column(DateTime, nullable=True)
     purchase_price = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
+    # Pick & Place setup (only used for machine_type == "Pick & Place")
+    pcb_origin_x = Column(Float, nullable=True)
+    pcb_origin_y = Column(Float, nullable=True)
+    nozzle_height_datum = Column(Float, nullable=True)
+    default_mount_speed = Column(Integer, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
 

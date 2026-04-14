@@ -17,6 +17,10 @@ class MachineBase(BaseModel):
     purchase_date: Optional[datetime] = None
     purchase_price: Optional[float] = None
     notes: Optional[str] = None
+    pcb_origin_x: Optional[float] = None
+    pcb_origin_y: Optional[float] = None
+    nozzle_height_datum: Optional[float] = None
+    default_mount_speed: Optional[int] = None
 
 
 class MachineCreate(MachineBase):
@@ -36,6 +40,10 @@ class MachineUpdate(BaseModel):
     purchase_date: Optional[datetime] = None
     purchase_price: Optional[float] = None
     notes: Optional[str] = None
+    pcb_origin_x: Optional[float] = None
+    pcb_origin_y: Optional[float] = None
+    nozzle_height_datum: Optional[float] = None
+    default_mount_speed: Optional[int] = None
 
 
 class MachineResponse(MachineBase):

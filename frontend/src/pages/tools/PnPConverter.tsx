@@ -336,6 +336,10 @@ export default function PnPConverter() {
   const pnpMachines = (machinesData?.items || []).filter((m) => m.machine_type === "Pick & Place");
   const { data: feedersData } = useFeeders(selectedMachineId ?? undefined);
   const feeders: Feeder[] = feedersData?.items || [];
+  const selectedMachine = pnpMachines.find((m) => m.id === selectedMachineId);
+  const pcbOriginX = selectedMachine?.pcb_origin_x ?? null;
+  const pcbOriginY = selectedMachine?.pcb_origin_y ?? null;
+  const hasPcbOrigin = pcbOriginX !== null && pcbOriginY !== null;
 
   // Saved sessions
   const PNP_CATEGORY = "pnp_session";
@@ -352,7 +356,8 @@ export default function PnPConverter() {
   const uniquePackages = new Set(components.map((c) => c.package).filter(Boolean));
 
   function getSettings(designator: string) {
-    return componentSettings[designator] || { feederNo: 1, skip: false, head: 0, mountSpeed: 100 };
+    const defaultSpeed = selectedMachine?.default_mount_speed ?? 100;
+    return componentSettings[designator] || { feederNo: 1, skip: false, head: 0, mountSpeed: defaultSpeed };
   }
 
   function updateSettings(designator: string, patch: Partial<{ feederNo: number; skip: boolean; head: number; mountSpeed: number }>) {
@@ -691,14 +696,21 @@ export default function PnPConverter() {
     });
     setLoading(false);
 
+    const shiftX = pcbOriginX ?? 0;
+    const shiftY = pcbOriginY ?? 0;
+    let negativeCount = 0;
+
     const rows = exportComponents.map((c) => {
       const s = getSettings(c.designator);
+      const ex = c.x - shiftX;
+      const ey = c.y - shiftY;
+      if (ex < 0 || ey < 0) negativeCount++;
       return [
         c.designator,
         c.value ?? "",
         c.package ?? "",
-        c.x.toFixed(2),
-        c.y.toFixed(2),
+        ex.toFixed(2),
+        ey.toFixed(2),
         c.rotation.toFixed(2),
         s.head,
         s.feederNo,
@@ -709,6 +721,10 @@ export default function PnPConverter() {
         s.skip ? 1 : 0,
       ].join(",");
     });
+
+    if (hasPcbOrigin && negativeCount > 0) {
+      toast.error(`${negativeCount} components have negative coordinates after PCB-origin shift. Verify the origin or calibration.`);
+    }
 
     const csv = [...header, ...rows].join("\r\n") + "\r\n";
     const blob = new Blob([csv], { type: "text/csv;charset=us-ascii;" });
@@ -1408,6 +1424,32 @@ export default function PnPConverter() {
                   width={500}
                   height={350}
                 />
+
+                {/* Machine setup reminder */}
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs space-y-1">
+                  <p className="font-semibold text-amber-400">⚠ Before calibrating: confirm machine setup</p>
+                  <p className="text-muted-foreground">
+                    Make sure you have entered the PCB origin and nozzle height for this machine. On the NeoDen YY1:
+                  </p>
+                  <ol className="list-decimal list-inside text-muted-foreground space-y-0.5 ml-1">
+                    <li>On the machine screen, tap <strong>Parameters</strong></li>
+                    <li>Enter the machine's manufacturing year as the password (e.g. <code className="font-mono">2022</code>)</li>
+                    <li>Enter the <strong>PCB Origin</strong> and <strong>Nozzle Height Datum</strong> — use the same values as on the <em>Machine page &rarr; PCB Setup</em> in this app</li>
+                  </ol>
+                </div>
+
+                {/* Calibration step-by-step */}
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs space-y-1">
+                  <p className="font-semibold text-primary">How to calibrate</p>
+                  <ol className="list-decimal list-inside text-muted-foreground space-y-0.5 ml-1">
+                    <li>Place the PCB on the machine.</li>
+                    <li>Check the preview above matches the physical board — each component should be in the expected location. Use <em>Rotate</em> / <em>Mirror</em> if not.</li>
+                    <li>On the machine, open <strong>Manual Test</strong>.</li>
+                    <li>Move the nozzle on top of each component you will use for calibration. We recommend <strong>at least 2 and ideally 4</strong> components spread across the board (top, bottom, left, right corners).</li>
+                    <li>Enter the logical coordinates shown on the machine into the fields below for each reference component.</li>
+                    <li>Click <strong>Apply Calibration</strong>, then save your file.</li>
+                  </ol>
+                </div>
               </div>
             )}
 
@@ -1620,7 +1662,7 @@ export default function PnPConverter() {
 
                       {/* Machine coordinates (user input) */}
                       <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
-                        <span className="text-xs font-medium uppercase tracking-wider">Machine (enter actual)</span>
+                        <span className="text-xs font-medium uppercase tracking-wider">Enter Logical Coordinates</span>
                         <div className="grid grid-cols-3 gap-2">
                           <div className="space-y-1">
                             <Label className="text-xs">X (mm)</Label>
@@ -1819,7 +1861,25 @@ export default function PnPConverter() {
                     <Label className="text-xs">P&amp;P Machine</Label>
                     <select
                       value={selectedMachineId ?? ""}
-                      onChange={(e) => setSelectedMachineId(e.target.value ? Number(e.target.value) : null)}
+                      onChange={(e) => {
+                        const id = e.target.value ? Number(e.target.value) : null;
+                        setSelectedMachineId(id);
+                        // Apply machine's default mount speed to any components without an override
+                        const m = pnpMachines.find((mm) => mm.id === id);
+                        const defaultSpeed = m?.default_mount_speed;
+                        if (defaultSpeed && defaultSpeed > 0) {
+                          setComponentSettings((prev) => {
+                            const next = { ...prev };
+                            for (const c of components) {
+                              const existing = next[c.designator];
+                              if (!existing) {
+                                next[c.designator] = { feederNo: 1, skip: false, head: 0, mountSpeed: defaultSpeed };
+                              }
+                            }
+                            return next;
+                          });
+                        }
+                      }}
                       className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-w-[200px]"
                     >
                       <option value="">None (manual entry)</option>
@@ -1830,6 +1890,19 @@ export default function PnPConverter() {
                       ))}
                     </select>
                   </div>
+                  {selectedMachine && (
+                    <div className="flex flex-col gap-1 text-xs">
+                      {hasPcbOrigin ? (
+                        <Badge color="green">
+                          PCB origin: ({pcbOriginX!.toFixed(2)}, {pcbOriginY!.toFixed(2)}) mm — coordinates will be shifted on export
+                        </Badge>
+                      ) : (
+                        <Badge color="yellow">
+                          No PCB origin set — coordinates exported as-is. Set on the machine page for automatic shift.
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                   {feeders.length > 0 && (
                     <>
                       <Badge color="green">{feeders.length} feeders loaded</Badge>
