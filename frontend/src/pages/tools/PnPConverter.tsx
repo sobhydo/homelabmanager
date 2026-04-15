@@ -35,6 +35,7 @@ import type {
 import {
   useSavedFiles,
   useUploadSavedFile,
+  useReplaceSavedFile,
   useDeleteSavedFile,
 } from "../../api/saved-files";
 import { useFeeders } from "../../api/feeders";
@@ -345,7 +346,11 @@ export default function PnPConverter() {
   const PNP_CATEGORY = "pnp_session";
   const { data: savedSessions, isLoading: loadingSessions } = useSavedFiles(PNP_CATEGORY);
   const saveMutation = useUploadSavedFile();
+  const replaceMutation = useReplaceSavedFile();
   const deleteMutation = useDeleteSavedFile();
+  // Tracks which saved session (if any) is currently loaded — used for "Save" (update) vs "Save As New"
+  const [loadedSessionId, setLoadedSessionId] = useState<number | null>(null);
+  const [loadedSessionName, setLoadedSessionName] = useState<string | null>(null);
 
   // ---- helpers ----
   const filteredComponents = components.filter((c) => {
@@ -380,13 +385,10 @@ export default function PnPConverter() {
     componentSettings: Record<string, { feederNo: number; skip: boolean; head: number; mountSpeed: number }>;
   }
 
-  async function handleSaveSession() {
-    const sessionName = prompt("Name for this P&P session:", file?.name?.replace(/\.[^.]+$/, "") || "session");
-    if (!sessionName) return;
-
+  function buildSessionBlob(name: string): File {
     const session: PnPSession = {
       step,
-      fileName: file?.name || "unknown",
+      fileName: file?.name || loadedSessionName || "unknown",
       parseResult,
       components,
       calibrationPoints,
@@ -395,17 +397,51 @@ export default function PnPConverter() {
       sideFilter,
       componentSettings,
     };
-
     const blob = new Blob([JSON.stringify(session)], { type: "application/json" });
-    const sessionFile = new File([blob], `${sessionName}.json`, { type: "application/json" });
+    return new File([blob], `${name}.json`, { type: "application/json" });
+  }
+
+  function sessionNotes(): string {
+    return `${components.length} components · ${parseResult?.format || "?"} · ${calibrated ? "calibrated" : "uncalibrated"}`;
+  }
+
+  // "Save" — updates the currently loaded session if any, otherwise prompts for a new name
+  async function handleSaveSession() {
+    if (loadedSessionId !== null) {
+      const sessionFile = buildSessionBlob(loadedSessionName || "session");
+      try {
+        await replaceMutation.mutateAsync({
+          id: loadedSessionId,
+          file: sessionFile,
+          notes: sessionNotes(),
+        });
+        toast.success(`Session "${loadedSessionName}" updated.`);
+      } catch {
+        // handled by interceptor
+      }
+      return;
+    }
+    await handleSaveAsNewSession();
+  }
+
+  async function handleSaveAsNewSession() {
+    const defaultName = loadedSessionName
+      ? `${loadedSessionName} (copy)`
+      : file?.name?.replace(/\.[^.]+$/, "") || "session";
+    const sessionName = prompt("Name for this P&P session:", defaultName);
+    if (!sessionName) return;
+
+    const sessionFile = buildSessionBlob(sessionName);
 
     try {
-      await saveMutation.mutateAsync({
+      const created = await saveMutation.mutateAsync({
         file: sessionFile,
         name: sessionName,
         category: PNP_CATEGORY,
-        notes: `${components.length} components · ${parseResult?.format || "?"} · ${calibrated ? "calibrated" : "uncalibrated"}`,
+        notes: sessionNotes(),
       });
+      setLoadedSessionId(created.id);
+      setLoadedSessionName(sessionName);
       toast.success("Session saved.");
     } catch {
       // handled by interceptor
@@ -425,6 +461,9 @@ export default function PnPConverter() {
       setSideFilter(data.sideFilter);
       setComponentSettings(data.componentSettings);
       setShowSavedSessions(false);
+      setLoadedSessionId(id);
+      const meta = savedSessions?.items?.find((s) => s.id === id);
+      setLoadedSessionName(meta?.name ?? null);
       toast.success("Session loaded.");
     } catch {
       toast.error("Failed to load session.");
@@ -446,6 +485,8 @@ export default function PnPConverter() {
     const selected = files[0];
     if (!selected) return;
     setFile(selected);
+    setLoadedSessionId(null);
+    setLoadedSessionName(null);
     setLoading(true);
     try {
       const formData = new FormData();
@@ -748,6 +789,8 @@ export default function PnPConverter() {
     setTransformInfo(null);
     setSideFilter("all");
     setComponentSettings({});
+    setLoadedSessionId(null);
+    setLoadedSessionName(null);
     setLoading(false);
   }
 
@@ -1084,15 +1127,31 @@ export default function PnPConverter() {
           )}
         </Button>
         {parseResult && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSaveSession}
-            disabled={saveMutation.isPending}
-          >
-            <BookmarkIcon className="h-4 w-4 mr-1.5" />
-            {saveMutation.isPending ? "Saving..." : "Save Session"}
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSaveSession}
+              disabled={saveMutation.isPending || replaceMutation.isPending}
+            >
+              <BookmarkIcon className="h-4 w-4 mr-1.5" />
+              {replaceMutation.isPending || saveMutation.isPending
+                ? "Saving..."
+                : loadedSessionId !== null
+                ? `Save "${loadedSessionName}"`
+                : "Save Session"}
+            </Button>
+            {loadedSessionId !== null && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveAsNewSession}
+                disabled={saveMutation.isPending || replaceMutation.isPending}
+              >
+                Save As New
+              </Button>
+            )}
+          </>
         )}
       </div>
 
@@ -2107,11 +2166,20 @@ export default function PnPConverter() {
               <Button
                 variant="outline"
                 onClick={handleSaveSession}
-                disabled={saveMutation.isPending}
+                disabled={saveMutation.isPending || replaceMutation.isPending}
               >
                 <BookmarkIcon className="h-4 w-4 mr-1.5" />
-                {saveMutation.isPending ? "Saving..." : "Save Session"}
+                {replaceMutation.isPending || saveMutation.isPending
+                  ? "Saving..."
+                  : loadedSessionId !== null
+                  ? `Save "${loadedSessionName}"`
+                  : "Save Session"}
               </Button>
+              {loadedSessionId !== null && (
+                <Button variant="outline" onClick={handleSaveAsNewSession} disabled={saveMutation.isPending || replaceMutation.isPending}>
+                  Save As New
+                </Button>
+              )}
               <Button variant="outline" onClick={handlePrintFeederConfig}>
                 <PrinterIcon className="h-4 w-4 mr-1.5" />
                 Print Feeder Config

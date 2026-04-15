@@ -56,6 +56,26 @@ export function useUploadSavedFile() {
   });
 }
 
+export function useReplaceSavedFile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, file, notes }: { id: number; file: File; notes?: string }) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (notes) formData.append("notes", notes);
+      const { data } = await apiClient.put<SavedFile>(
+        `/saved-files/${id}/content`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.lists() });
+    },
+  });
+}
+
 export function useDeleteSavedFile() {
   const qc = useQueryClient();
   return useMutation({

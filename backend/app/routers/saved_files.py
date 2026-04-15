@@ -115,6 +115,37 @@ def delete_saved_file(file_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+@router.put("/{file_id}/content", response_model=SavedFileResponse)
+async def replace_saved_file_content(
+    file_id: int,
+    file: UploadFile = File(...),
+    notes: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    settings=Depends(get_settings),
+):
+    """Replace the contents of an existing saved file, keeping the same id and name."""
+    saved = db.query(SavedFile).filter(SavedFile.id == file_id).first()
+    if not saved:
+        raise HTTPException(status_code=404, detail="Saved file not found")
+
+    # Delete the old file on disk (if present) and write the new one
+    if saved.file_path and os.path.exists(saved.file_path):
+        os.remove(saved.file_path)
+
+    new_path = await save_upload_file(file, settings.UPLOAD_DIR, subdir="saved")
+    saved.file_path = new_path
+    saved.file_size = os.path.getsize(new_path) if os.path.exists(new_path) else None
+    saved.mime_type = file.content_type
+    if file.filename:
+        saved.original_filename = file.filename
+    if notes is not None:
+        saved.notes = notes
+
+    db.commit()
+    db.refresh(saved)
+    return saved
+
+
 @router.patch("/{file_id}", response_model=SavedFileResponse)
 def update_saved_file(
     file_id: int,

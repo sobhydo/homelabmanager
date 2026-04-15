@@ -124,4 +124,17 @@
   #root {
     min-height: 100vh;
   }
+
+  /* Make native number-input spinners visible in dark mode */
+  input[type="number"].show-spinner::-webkit-inner-spin-button,
+  input[type="number"].show-spinner::-webkit-outer-spin-button {
+    opacity: 1;
+    filter: invert(70%);
+    cursor: pointer;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    opacity: 0.8;
+    filter: invert(60%);
+  }
 }
