@@ -383,6 +383,7 @@ export default function PnPConverter() {
     transformInfo: TransformInfo | null;
     sideFilter: "all" | "top" | "bottom";
     componentSettings: Record<string, { feederNo: number; skip: boolean; head: number; mountSpeed: number }>;
+    selectedMachineId?: number | null;
   }
 
   function buildSessionBlob(name: string): File {
@@ -396,6 +397,7 @@ export default function PnPConverter() {
       transformInfo,
       sideFilter,
       componentSettings,
+      selectedMachineId,
     };
     const blob = new Blob([JSON.stringify(session)], { type: "application/json" });
     return new File([blob], `${name}.json`, { type: "application/json" });
@@ -450,7 +452,10 @@ export default function PnPConverter() {
 
   async function handleLoadSession(id: number) {
     try {
-      const { data } = await apiClient.get<PnPSession>(`/saved-files/${id}/download`);
+      // cache-buster — the file on disk may have been replaced by a "Save" while the URL stays the same
+      const { data } = await apiClient.get<PnPSession>(
+        `/saved-files/${id}/download?t=${Date.now()}`
+      );
       setStep(data.step);
       setFile(null); // original File not available, but state is restored
       setParseResult(data.parseResult);
@@ -460,6 +465,9 @@ export default function PnPConverter() {
       setTransformInfo(data.transformInfo);
       setSideFilter(data.sideFilter);
       setComponentSettings(data.componentSettings);
+      if (data.selectedMachineId !== undefined) {
+        setSelectedMachineId(data.selectedMachineId);
+      }
       setShowSavedSessions(false);
       setLoadedSessionId(id);
       const meta = savedSessions?.items?.find((s) => s.id === id);
@@ -775,7 +783,11 @@ export default function PnPConverter() {
     a.download = `pnp_yy1_${file?.name?.replace(/\.[^.]+$/, "") || "output"}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("YY1 CSV downloaded");
+    if (hasPcbOrigin) {
+      toast.success(`YY1 CSV downloaded (coords shifted by PCB origin ${shiftX.toFixed(2)}, ${shiftY.toFixed(2)})`);
+    } else {
+      toast.success("YY1 CSV downloaded — no PCB origin shift applied. Select a machine with PCB origin set to shift coords.");
+    }
   }
 
   // ---- reset ----
@@ -2152,6 +2164,24 @@ export default function PnPConverter() {
               rowKey={(c) => `${c.designator}-${c.side}`}
               emptyMessage="No components match the current filter"
             />
+
+            {/* PCB origin shift status */}
+            {hasPcbOrigin ? (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs">
+                <p className="text-emerald-400">
+                  ✓ Export will shift coordinates by PCB origin (<span className="font-mono">{pcbOriginX!.toFixed(2)}, {pcbOriginY!.toFixed(2)}</span>) mm — the lower-left corner becomes (0, 0) for the machine.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs space-y-1">
+                <p className="font-semibold text-amber-400">⚠ No PCB origin shift will be applied</p>
+                <p className="text-muted-foreground">
+                  {selectedMachineId
+                    ? "The selected machine has no PCB origin set. Go to the machine page and fill in PCB Origin X/Y under PCB Setup."
+                    : "No machine is selected. Pick a P&P machine above so its PCB origin can be applied. Otherwise coordinates are exported as-is and may be negative."}
+                </p>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex flex-wrap gap-3">

@@ -98,6 +98,7 @@ def download_saved_file(file_id: int, db: Session = Depends(get_db)):
         path=saved.file_path,
         filename=saved.original_filename,
         media_type=saved.mime_type or "application/octet-stream",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
 
